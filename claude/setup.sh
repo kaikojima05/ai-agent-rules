@@ -13,7 +13,7 @@ log_success() {
     echo -e "\033[1;34m[success]\033[0m $1"
 }
 
-echo "🤖 multi-agent communication demo 環境構築 (3エージェント)"
+echo "🤖 multi-agent communication demo 環境構築"
 echo "========================================================"
 echo ""
 
