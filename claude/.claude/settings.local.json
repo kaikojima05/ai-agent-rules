@@ -64,7 +64,6 @@
       "mcp__serena__read_memory",
       "mcp__serena__read_memory",
       "mcp__serena__get_symbols_overview",
-      "mcp__serena__replace_regex",
       "Bash(# 完了ファイルをリセット\nrm -f ./tmp/worker1_done.txt\n\n# 進捗確認タイマーの設定（2分後）\n(sleep 120 && {\n    if [ ! -f ./tmp/worker1_done.txt ]; then\n        echo \"\"進捗確認を開始します...\"\"\n        ./agent-send.sh worker1 \"\"進捗はいかがですか？Disclosureコンポーネントの間隔調整で困っていることがあれば共有してください。\"\"\n    fi\n}) &\n\necho \"\"進捗管理システムを開始しました。worker1の作業完了を監視中...\"\")",
       "Bash(# 完了ファイルをリセット\nrm -f ./tmp/worker1_done.txt\n\n# 進捗確認タイマーの設定（2分後）\n(sleep 120 && {\n    if [ ! -f ./tmp/worker1_done.txt ]; then\n        echo \"\"進捗確認を開始します...\"\"\n        ./agent-send.sh worker1 \"\"進捗はいかがですか？ステップタイトルのfont-medium→font-boldの変更で困っていることがあれば共有してください。\"\"\n    fi\n}) &\n\necho \"\"進捗管理システムを開始しました。worker1の作業完了を監視中...\"\")",
       "Bash(# 完了ファイルをリセット\nrm -f ./tmp/worker1_done.txt\n\n# 進捗確認タイマーの設定（3分後に最初の確認）\n(sleep 180 && {\n    if [ ! -f ./tmp/worker1_done.txt ]; then\n        echo \"\"進捗確認を開始します...\"\"\n        ./agent-send.sh worker1 \"\"進捗はいかがですか？大幅なレイアウト変更作業で困っていることがあれば共有してください。段階的に実装を進めてください。\"\"\n    fi\n}) &\n\necho \"\"進捗管理システムを開始しました。3分後に進捗確認を行います。複雑なタスクのため、定期的に進捗報告をお願いします。\"\")",
@@ -77,19 +76,15 @@
       "mcp__serena__get_symbols_overview",
       "mcp__serena__find_symbol",
       "mcp__serena__search_for_pattern",
-      "mcp__serena__replace_regex",
       "Bash(WORKER_NUM=1)",
       "Bash(# 完了ファイルをリセット\nrm -f ./tmp/worker1_done.txt ./tmp/worker2_done.txt\n\n# 進捗確認タイマーの設定（2分後）\n(sleep 120 && {\n    echo \"\"進捗確認を開始します...\"\"\n    \n    # worker1の確認\n    if [ ! -f ./tmp/worker1_done.txt ]; then\n        echo \"\"worker1に進捗確認を送信...\"\"\n        ./agent-send.sh worker1 \"\"進捗はいかがですか？ProductDetail.tsxルーティングの404エラー修正で困っていることがあれば共有してください。\"\"\n    fi\n    \n}) &\n\necho \"\"進捗管理システムを開始しました。2分後に自動的に進捗確認を行います。\"\")",
       "Bash(# 完了ファイルをリセット\nrm -f ./tmp/worker1_done.txt\n\n# 進捗確認タイマーの設定（2分後）\n(sleep 120 && {\n    if [ ! -f ./tmp/worker1_done.txt ]; then\n        echo \"\"進捗確認を開始します...\"\"\n        ./agent-send.sh worker1 \"\"進捗はいかがですか？ProductDetailフォームのスタイリング修正で困っていることがあれば共有してください。\"\"\n    fi\n}) &\n\necho \"\"進捗管理システムを開始しました。worker1の作業完了を監視中...\"\")",
       "Bash(# 完了ファイルをリセット\nrm -f ./tmp/worker1_done.txt ./tmp/worker2_done.txt\n\n# 進捗確認タイマーの設定（3分後に最初の確認）\n(sleep 180 && {\n    if [ ! -f ./tmp/worker1_done.txt ]; then\n        echo \"\"進捗確認を開始します...\"\"\n        ./agent-send.sh worker1 \"\"進捗はいかがですか？大幅なフォーム実装作業で困っていることがあれば共有してください。段階的に実装を進めてください。\"\"\n    fi\n}) &\n\necho \"\"進捗管理システムを開始しました。3分後に進捗確認を行います。複雑なタスクのため、定期的に進捗報告をお願いします。\"\")",
       "Bash(# 完了ファイルをリセット\nrm -f ./tmp/worker1_done.txt ./tmp/worker2_done.txt\n\n# 進捗確認タイマーの設定（3分後に最初の確認）\n(sleep 180 && {\n    if [ ! -f ./tmp/worker1_done.txt ]; then\n        echo \"\"進捗確認を開始します...\"\"\n        ./agent-send.sh worker1 \"\"進捗はいかがですか？大幅なフォーム実装作業で困っていることがあれば共有してください。段階的に実装を進めてください。\"\"\n    fi\n}) &\n\necho \"\"進捗管理システムを開始しました。3分後に進捗確認を行います。複雑なタスクのため、定期的に進捗報告をお願いします。\"\")",
-      "mcp__serena__replace_symbol_body",
-      "Bash(npx biome format:*)",
-      "mcp__serena__replace_symbol_body"
+      "Bash(npx biome format:*)"
     ],
     "deny": [],
     "additionalDirectories": [
-      "../../frontend/"
     ]
   },
   "enableAllProjectMcpServers": true,
