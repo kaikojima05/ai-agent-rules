@@ -27,6 +27,8 @@ allowed-tools: Read, Grep, Glob, Shell
   - 設定ファイルが存在するディレクトリにて `npx eslint . --fix` を実行する。
 - **Biome**: `biome.json` を検知した場合
   - 設定ファイルが存在するディレクトリにて `npx biome lint --apply .` を実行する。
+- **typecheck**: `tsconfig.json` を検知した場合
+  - ESLint or Biome の設定ファイルが存在しなかった場合は、tsconfig.json が存在するディレクトリにて `npx tsc --noEmit` を実行する。
 
 ### DBスキーマの整形
 
