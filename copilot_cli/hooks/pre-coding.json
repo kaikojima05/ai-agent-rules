@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolsUse": [
+      {
+        "type": "command",
+        "bash": "./.github_cli/hooks/shell/pre-coding.sh",
+        "cwd": ".",
+        "timeoutSeconds": 10
+      }
+    ]
+  }
+}
