@@ -2,8 +2,8 @@
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.toolName')
 
-if [ "$TOOL" = "apply_patch" ]; then
-  FILE=$(echo "$INPUT" | jq -r '.toolArgs' | grep -m1 'Update File:\|Create File:' | sed 's/.*: //')
+if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
+  FILE=$(echo "$INPUT" | jq -r '.toolArgs.file_path // empty')
 
   # ファイルパスが取れなければスキップ
   [ -z "$FILE" ] && exit 0
