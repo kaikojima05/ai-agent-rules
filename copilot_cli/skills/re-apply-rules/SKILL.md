@@ -12,14 +12,14 @@ allowed-tools: Shell
 
 ### Step 1: スキルを呼び出す
 
-スキルは run オプション付きで呼び出せる:
+スキルは引数付きで呼び出せる※ただし、引数として渡せるのは run のみ:
 
 ```
-/re-apply-style --run-prompt
+/re-apply-style run-prompt
 ```
 
-- **オプションあり**: **Step2** の実行後に、続けて `run-prompt` スキルを実行する
-- **オプションなし**: **Step2** を実行して終了
+- **引数あり**: **Step2** の実行後に、続けて `run-prompt` スキルを実行する
+- **引数なし**: **Step2** を実行して終了
 
 ### Step 2: エージェントが @.github/copilot-instructions.md の内容を確認する
 
