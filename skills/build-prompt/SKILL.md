@@ -1,6 +1,6 @@
 ---
 name: build-prompt
-description: @.[agent_name]/prompt/.prompt.md の内容を更新する
+description: "@.[agent_name]/prompt/.prompt.md の内容を更新する"
 allowed-tools: Shell
 disable-model-invocation: true
 ---
