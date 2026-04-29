@@ -1,7 +1,7 @@
 # API の追加・編集ルール
 
 ## 実装方針
-1. insert や update（upsert）、delete を行う際は Prisma の $transaction を使用すること
+1. insert や update（upsert）、delete を行う際は $transaction を使用すること
    - interactive transaction（コールバック形式）を基本とする
    - Why: 部分的な書き込みによるデータ不整合を防ぐため
 2. 日付順のソートは昇順（古い順）をデフォルトとすること
@@ -10,7 +10,7 @@
 
 ## 命名ルール
 - copilot-instructions.md の命名規則に準拠
-- @front/features/mypage/resources/ 内の関数名は [resource名]〇〇 とする
+- `@front/features/mypage/resources/` 内の関数名は **[resource名]〇〇** とする
   - 例: billPaymentTermUpdate, contractFindMany
 
 ## DB クエリのアンチパターン

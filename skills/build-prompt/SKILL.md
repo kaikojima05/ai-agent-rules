@@ -1,6 +1,6 @@
 ---
 name: build-prompt
-description: github/prompt/.prompt.md の内容を更新する
+description: [agent_name]/prompt/.prompt.md の内容を更新する
 allowed-tools: Shell
 ---
 
@@ -21,9 +21,9 @@ allowed-tools: Shell
 - **引数あり**: 引数に渡された概要を中心にプロンプトを構築する →  ユーザーと対話しながら要件を整理してプロンプトを構築する。
 - **引数なし**: エージェントが会話の中から自律的にプロンプトの概要を抽出 → 方向性が間違っていないかユーザーに確認する → ユーザーと対話しながら要件を整理してプロンプトを構築する。
 
-### Step 2: エージェントが @.github/prompt/.prompt.md に内容を反映する
+### Step 2: エージェントが @.[agent_name]/prompt/.prompt.md に内容を反映する
 
-整理された要件を元に、エージェントが @.github/prompt/.prompt.md の内容を更新する。ユーザーは内容を確認してフィードバックを行い、必要に応じてエージェントが修正を加える。
+整理された要件を元に、エージェントが @.[agent_name]/prompt/.prompt.md の内容を更新する。ユーザーは内容を確認してフィードバックを行い、必要に応じてエージェントが修正を加える。
 
 ## .prompt.md の基本構成
 
@@ -73,9 +73,9 @@ VALUES
 - @front/features/mypage/resources/bill/components/BillCustomerInvoiceDetails.tsx
 
 ## 参照ルール
-- @.github/rules/api-pattern.md
-- @.github/rules/testing-pattern.md
-- @.github/rules/ui-pattern.md
+- @.[agent_name]/rules/api-pattern.md
+- @.[agent_name]/rules/testing-pattern.md
+- @.[agent_name]/rules/ui-pattern.md
 
 ## 完了条件
 - 要件を満たしていること

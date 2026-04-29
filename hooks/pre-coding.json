@@ -4,7 +4,7 @@
     "preToolUse": [
       {
         "type": "command",
-        "bash": "./.github/hooks/shell/require-test.sh",
+        "bash": "./.[agent_name]/hooks/shell/require-test.sh",
         "timeoutSec": 10
       }
     ]

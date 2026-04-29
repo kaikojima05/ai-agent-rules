@@ -1,9 +1,12 @@
 #!/bin/bash
 INPUT=$(cat)
-TOOL=$(echo "$INPUT" | jq -r '.toolName')
+TOOL=$(echo "$INPUT" | jq -r '.tool_name')
 
-if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
-  FILE=$(echo "$INPUT" | jq -r '.toolArgs.file_path // empty')
+# [NOTE]: init-agent 対象
+# copilot cli: if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
+# claude code: if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; then
+if # 条件式
+  FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
   # ファイルパスが取れなければスキップ
   [ -z "$FILE" ] && exit 0
@@ -20,7 +23,13 @@ if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
 
   if [ ! -f "$TEST_FILE" ]; then
     jq -n --arg r "テストファイル($TEST_FILE)が存在しません。TDD規約により、先にテストを作成してください。" \
-      '{"permissionDecision":"deny","permissionDecisionReason":$r}'
+      '{
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "permissionDecision": "deny",
+          "permissionDecisionReason": $r
+        }
+      }'
     exit 0
   fi
 fi

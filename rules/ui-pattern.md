@@ -1,7 +1,7 @@
 # UI コンポーネントの編集ルール
 
 ## インポート元
-1. UI コンポーネントは @front/components/ からインポートすること
+1. UI コンポーネントは `@front/components/` からインポートすること
    - antd, Headless UI, React Aria を直接インポートしてはならない
    - Why: ライブラリの差し替え・ラップ時の影響範囲を限定するため
 
@@ -11,7 +11,12 @@
    b. 同一の構造で2回以上表示している部分
    - Why: render 関数の肥大化を防ぎ、差分レビューの単位を小さくするため
 
+## スタイリング
+
+1. プロジェクト固有の拡張クラス定義がある場合は、それを優先して使用すること
+2. クラス名の動的な結合には `classnames`（または `clsx`）パッケージを使用すること
+
 ## 命名ルール
-1. @front/features/mypage/resources/ もしくは @front/features/pre-mypage/resources/ 内に
-   作成するコンポーネントの名前は [resource名]〇〇.tsx とすること
-   - 例: bill/ 配下なら BillPaymentDetail.tsx
+1. `@front/features/mypage/resources/` もしくは `@front/features/pre-mypage/resources/` 内に
+   作成するコンポーネントの名前は **[resource名]〇〇.tsx** とすること
+   - 例: bill/ 配下なら `BillPaymentDetail.tsx`
