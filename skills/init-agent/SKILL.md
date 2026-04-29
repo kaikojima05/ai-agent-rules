@@ -25,18 +25,24 @@ disable-model-invocation: true
 
 ### Step 2: エージェント種別を特定する
 
-引数またはユーザーの回答から、以下の対応表で AGENTS.md が存在するディレクトリ名を決定する:
+引数またはユーザーの回答から、以下の対応表で置換に使用する名前と AGENTS.md が存在するディレクトリ名を決定する:
 
-| 引数 | ディレクトリ名 |
-|------|---------------|
-| `claude` | `.claude` |
-| `github` | `.github` |
+| 引数 | 置換値（`[agent_name]` に入る値） | ディレクトリ名 |
+|------|------------------------------------|---------------|
+| `claude` | `claude` | `.claude` |
+| `github` | `github` | `.github` |
 
-上記以外の引数が渡された場合は、ユーザーにディレクトリ名を確認する。
+上記以外の引数が渡された場合は、ユーザーに置換値とディレクトリ名を確認する。
 
 ### Step 3: `[agent_name]` を置換する
 
-AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象に、`[agent_name]` を Step 2 で決定したディレクトリ名（例: `.claude`, `.github`）に置換する。
+AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象に、`[agent_name]` を Step 2 で決定した置換値（例: `claude`, `github`）に置換する。
+
+テンプレート内では `@.[agent_name]/...` や `./.[agent_name]/...` のように **dot は placeholder の外側** に置く規約とする。dot を含めて置換しないこと。
+
+ただし、frontmatter の `description:` 行のように bare `[agent_name]/...` で書かれている箇所は、テンプレート側のスタイル不統一のため、置換後に手で `.claude/...` のような形へ整形する（または、テンプレート側を `.[agent_name]/...` に統一しておく）。
+
+なお、本ファイル（`init-agent/SKILL.md`）自身は placeholder の概念を説明する文書のため、置換対象から除外すること。
 
 ### Step 4: `[NOTE]: init-agent 対象` を解決する
 
