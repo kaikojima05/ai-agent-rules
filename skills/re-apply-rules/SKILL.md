@@ -2,6 +2,7 @@
 name: re-apply-rules
 description: re-apply-rules copilot-instructions.md の内容を再確認する
 allowed-tools: Shell
+disable-model-invocation: true
 ---
 
 ## 目的

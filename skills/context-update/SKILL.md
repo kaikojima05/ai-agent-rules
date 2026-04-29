@@ -2,6 +2,7 @@
 name: context-update
 description: context-dictionary API に登録済みの知見を更新・follow-up を管理する。
 allowed-tools: Shell
+disable-model-invocation: true
 ---
 
 ## 目的

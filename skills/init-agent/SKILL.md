@@ -2,6 +2,7 @@
 name: init-agent
 description: 配置済みのエージェント設定ファイル群の [agent_name] 置換および [NOTE]: init-agent 対象 の解決を行う
 allowed-tools: Read, Grep, Glob, Shell
+disable-model-invocation: true
 ---
 
 ## 目的

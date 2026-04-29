@@ -2,6 +2,7 @@
 name: run-prompt
 description: [agent_name]/prompt/.prompt.md の内容を実行する
 allowed-tools: Shell
+disable-model-invocation: true
 ---
 
 ## 目的

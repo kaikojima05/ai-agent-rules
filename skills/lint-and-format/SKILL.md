@@ -2,6 +2,7 @@
 name: lint-and-format
 description: 実装完了後にフォーマッタおよびリンターを実行し、コード品質とスタイルを修正する。 
 allowed-tools: Read, Grep, Glob, Shell
+disable-model-invocation: true
 ---
 
 ## 目的

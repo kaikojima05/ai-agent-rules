@@ -2,6 +2,7 @@
 name: context-save
 description: セッションで得た知見を context-dictionary API に登録する。
 allowed-tools: Shell
+disable-model-invocation: true
 ---
 
 ## 目的
