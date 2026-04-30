@@ -1,6 +1,6 @@
 ---
-name: re-apply-rules
-description: re-apply-rules copilot-instructions.md の内容を再確認する
+name: re-apply-guidline
+description: re-apply-guidline AGENTS.md の内容を再確認する
 allowed-tools: Shell
 disable-model-invocation: true
 ---
@@ -13,10 +13,10 @@ disable-model-invocation: true
 
 ### Step 1: スキルを呼び出す
 
-スキルは引数付きで呼び出せる※ただし、引数として渡せるのは run のみ:
+スキルは引数付きで呼び出せる※ただし、引数として渡せるのは run-prompt のみ:
 
 ```
-/re-apply-style run-prompt
+/re-apply-guidline run-prompt
 ```
 
 - **引数あり**: **Step2** の実行後に、続けて `run-prompt` スキルを実行する
