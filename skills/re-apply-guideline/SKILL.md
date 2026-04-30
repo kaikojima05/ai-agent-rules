@@ -1,6 +1,6 @@
 ---
-name: re-apply-guidline
-description: re-apply-guidline AGENTS.md の内容を再確認する
+name: re-apply-guideline
+description: re-apply-guideline AGENTS.md の内容を再確認する
 allowed-tools: Shell
 disable-model-invocation: true
 ---
