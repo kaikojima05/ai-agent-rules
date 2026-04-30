@@ -2,10 +2,7 @@
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name')
 
-# [NOTE]: init-agent 対象
-# copilot cli: if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
-# claude code: if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; then
-if # 条件式
+if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; then
   FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
   # ファイルパスが取れなければスキップ
@@ -18,6 +15,12 @@ if # 条件式
   DIR=$(dirname "$FILE")
   BASE=$(basename "$FILE" | sed 's/\.[^.]*$//')
   EXT=$(basename "$FILE" | sed 's/^.*\.//')
+
+  # コードファイルのみ対象（.md, .json, .sh などは対象外）
+  case "$EXT" in
+    ts|tsx|js|jsx) ;;
+    *) exit 0 ;;
+  esac
 
   TEST_FILE="$DIR/$BASE.test.$EXT"
 
@@ -35,3 +38,4 @@ if # 条件式
 fi
 
 exit 0
+
