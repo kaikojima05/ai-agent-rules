@@ -8,11 +8,6 @@
    - Why: 時系列データは古い→新しいが自然な並びであり、UI 側で reverse する方が意図が明確になるため
    - UI の要件で降順が必要な場合は、API の引数で制御する
 
-## 命名ルール
-- copilot-instructions.md の命名規則に準拠
-- `@front/features/mypage/resources/` 内の関数名は **[resource名]〇〇** とする
-  - 例: billPaymentTermUpdate, contractFindMany
-
 ## DB クエリのアンチパターン
 1. DB から取得したデータを filter() している場合は、WHERE 句で絞れないか検討すること
    a. WHERE 句で絞れる場合 → クエリを修正する

@@ -69,7 +69,7 @@ disable-model-invocation: true
 | content | string | Yes | 知見の概要 |
 | detail | string | No | 詳細な説明・手順・コード等 |
 | rationale | string | No | 判断理由・背景 (decision では必須) |
-| agent | string (max 50) | Yes | `copilot-cli` 固定 |
+| agent | string (max 50) | Yes | 動作中のエージェント名 |
 | repo | string (max 200) | No | リポジトリ名 |
 | branch | string (max 200) | No | ブランチ名 |
 | sessionId | string (max 100) | No | セッション識別ID |
@@ -103,7 +103,6 @@ curl -s -X POST http://localhost:3210/api/insights/bulk \
 
 ## 注意事項
 
-- `agent` フィールドは必ず `copilot-cli` を設定すること
 - API サーバー (`http://localhost:3210`) が起動していない場合はユーザーに通知すること
 - content は具体的に書くこと。「問題を解決した」のような曖昧な記述は避ける
 - 1セッションから複数の知見が出る場合はそれぞれ独立した Insight として登録する
