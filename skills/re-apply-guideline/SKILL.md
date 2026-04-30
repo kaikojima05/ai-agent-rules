@@ -22,7 +22,7 @@ disable-model-invocation: true
 - **引数あり**: **Step2** の実行後に、続けて `run-prompt` スキルを実行する
 - **引数なし**: **Step2** を実行して終了
 
-### Step 2: エージェントが @.[agent_name]/AGENTS.md の内容を確認する
+### Step 2: エージェントが @AGENTS.md の内容を確認する
 
 ## 注意事項
 
