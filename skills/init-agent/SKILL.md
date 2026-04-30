@@ -18,6 +18,7 @@ disable-model-invocation: true
 ```
 /init-agent claude
 /init-agent github
+/init-agent codex
 ```
 
 - **引数あり**: 引数をエージェント種別として使用する（後述の対応表を参照）
@@ -31,12 +32,13 @@ disable-model-invocation: true
 |------|------------------------------------|---------------|
 | `claude` | `claude` | `.claude` |
 | `github` | `github` | `.github` |
+| `codex` | `codex` | `.codex` |
 
 上記以外の引数が渡された場合は、ユーザーに置換値とディレクトリ名を確認する。
 
 ### Step 3: `[agent_name]` を置換する
 
-AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象に、`[agent_name]` を Step 2 で決定した置換値（例: `claude`, `github`）に置換する。
+AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象に、`[agent_name]` を Step 2 で決定した置換値（例: `claude`, `github`, `codex`）に置換する。
 
 テンプレート内では `@.[agent_name]/...` や `./.[agent_name]/...` のように **dot は placeholder の外側** に置く規約とする。dot を含めて置換しないこと。
 
@@ -54,6 +56,7 @@ AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象
 
 - **claude**: `if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; then`
 - **github**: `if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then`
+- **codex**: `if [ "$TOOL" = "apply_patch" ]; then`
 
 `[NOTE]` コメント行と未使用の選択肢コメントは削除し、確定した条件式のみを残す。
 

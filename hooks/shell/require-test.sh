@@ -2,7 +2,11 @@
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name')
 
-if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; then
+# [NOTE]: init-agent 対象
+# copilot cli: if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
+# claude code: if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; then
+# codex: if [ "$TOOL" = "apply_patch" ]; then
+if 
   FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
   # ファイルパスが取れなければスキップ
@@ -38,4 +42,3 @@ if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; t
 fi
 
 exit 0
-
