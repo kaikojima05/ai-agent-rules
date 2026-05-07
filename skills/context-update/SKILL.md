@@ -31,6 +31,7 @@ disable-model-invocation: true
 1. ユーザーの説明からキーワードを抽出
 2. `GET /api/insights` や `GET /api/search` で候補を検索
 3. 候補を提示して確認を取る（候補が1件なら確認不要）
+  - 必要に応じて type や、紐づいている follow-up や tag なども更新する
 
 ID が明示されている場合は `GET /api/insights/:id` で現在の状態を取得する。
 
