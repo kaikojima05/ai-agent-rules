@@ -75,7 +75,7 @@ VALUES
 
 ## 参照ルール
 - @.[agent_name]/rules/api-pattern.md
-- @.[agent_name]/rules/testing-pattern.md
+- @.[agent_name]/rules/tdd-pattern.md
 - @.[agent_name]/rules/ui-pattern.md
 
 ## 完了条件
