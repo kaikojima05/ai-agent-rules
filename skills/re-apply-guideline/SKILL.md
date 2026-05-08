@@ -16,10 +16,10 @@ disable-model-invocation: true
 スキルは引数付きで呼び出せる※ただし、引数として渡せるのは run-prompt のみ:
 
 ```
-/re-apply-guidline run-prompt
+/re-apply-guidline run-agent
 ```
 
-- **引数あり**: **Step2** の実行後に、続けて `run-prompt` スキルを実行する
+- **引数あり**: **Step2** の実行後に、続けて `run-agent` スキルを実行する
 - **引数なし**: **Step2** を実行して終了
 
 ### Step 2: エージェントが @AGENTS.md の内容を確認する

@@ -1,5 +1,5 @@
 ---
-name: run-prompt
+name: run-agent
 description: "@.[agent_name]/prompt/.prompt.md の内容を実行する"
 allowed-tools: Shell
 disable-model-invocation: true
@@ -16,7 +16,7 @@ disable-model-invocation: true
 スキルは引数なし
 
 ```
-/run-prompt
+/run-agent
 ```
 
 ### Step 2: エージェントが @.[agent_name]/prompt/.prompt.md の内容を確認・実行する
