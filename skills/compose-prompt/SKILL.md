@@ -1,5 +1,5 @@
 ---
-name: build-prompt
+name: compose-prompt
 description: "@.[agent_name]/prompt/.prompt.md の内容を更新する"
 allowed-tools: Shell
 disable-model-invocation: true
@@ -16,7 +16,7 @@ disable-model-invocation: true
 スキルは引数付きで呼び出せる:
 
 ```
-/build-prompt トークンに認証情報を追加する
+/compose-prompt トークンに認証情報を追加する
 ```
 
 - **引数あり**: 引数に渡された概要を中心にプロンプトを構築する →  ユーザーと対話しながら要件を整理してプロンプトを構築する。
