@@ -25,8 +25,9 @@ ai-agent-rules/
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
 │   ├── init-agent/         # [agent_name] と [NOTE] をエージェント種別に応じて解決
 │   ├── re-apply-guideline/ # コンテキスト肥大時に AGENTS.md を再確認させる
-│   ├── build-prompt/       # プロンプト構築
-│   ├── run-prompt/         # プロンプト実行（require-test.sh を含む）
+│   ├── compose-prompt/     # 対話を通じてプロンプトを組み立てる
+│   ├── run-agent/          # 構築済みプロンプトに従ってエージェントが作業を実行
+│   ├── interview/          # 設計・実装の意図を問いかけ、検討漏れに気づかせる対話
 │   ├── clean-code/         # 変更コードのレビューと修正
 │   ├── context-save/       # コンテキスト保存
 │   ├── context-search/     # コンテキスト検索
@@ -46,14 +47,17 @@ ai-agent-rules/
 2. 対象エージェントに応じて `init-agent` スキルを実行し、テンプレート中の `[agent_name]` および `[NOTE]: init-agent 対象` を解決する。
 
    ```
+   # cluade, codex
    /init-agent claude
-   /init-agent codex
    /init-agent github
+
+   # codex
+   $init-agent codex
    ```
 
 3. 必要に応じて各エージェント固有の設定（`claude/settings.json`, `codex/config.toml` 等）を配置する。
 
 ## 注意
 
-- 本リポジトリはテンプレート元なので、`init-agent` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
+- 本リポジトリはテンプレートなので、`init-agent` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - `[agent_name]` の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れは grep で確認する。
