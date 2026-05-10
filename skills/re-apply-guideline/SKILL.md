@@ -13,7 +13,7 @@ disable-model-invocation: true
 
 ### Step 1: スキルを呼び出す
 
-スキルは引数付きで呼び出せる※ただし、引数として渡せるのは run-prompt のみ:
+スキルは引数付きで呼び出せる※ただし、引数として渡せるのは run-agent のみ:
 
 ```
 /re-apply-guidline run-agent
