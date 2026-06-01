@@ -36,6 +36,7 @@
       "mcp__chrome-devtools__navigate",
       "mcp__chrome-devtools__evaluate_script",
       "mcp__chrome-devtools__upload_file",
+      "mcp__chrome-devtools__wait_for",
       "WebFetch(domain:localhost)"
     ],
     "deny": [
