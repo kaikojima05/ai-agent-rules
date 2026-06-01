@@ -38,6 +38,7 @@
       "mcp__chrome-devtools__upload_file",
       "mcp__chrome-devtools__wait_for",
       "mcp__chrome-devtools__list_console_messages",
+      "mcp__chrome-devtools__list_pages",
       "WebFetch(domain:localhost)"
     ],
     "deny": [
