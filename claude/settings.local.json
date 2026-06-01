@@ -40,6 +40,7 @@
       "mcp__chrome-devtools__list_console_messages",
       "mcp__chrome-devtools__list_pages",
       "mcp__chrome-devtools__fill_form",
+      "mcp__chrome-devtools__navigate_page",
       "WebFetch(domain:localhost)"
     ],
     "deny": [
