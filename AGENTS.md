@@ -18,5 +18,13 @@
 2. コードの追加・変更時は必ず意図をユーザーに説明する（テストコードは除く）
   - 変数名や関数名で意図を簡略化して伝えることは禁止、必ず本質的な説明を行うこと
 
+## スキル
+
+下記のスキルは、指示を待たず自律的に積極的に活用すること。
+
+- `/context-save` or `$context-save`
+- `/context-search` or `$context-search`
+- `/context-update` or `$context-update`
+
 ## !only-codex
 1. HTTP リクエストの送信はサンドボックス外で行うこと
