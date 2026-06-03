@@ -29,6 +29,7 @@
       "mcp__serena__find_symbol",
       "mcp__serena__get_symbols_overview",
       "mcp__serena__search_for_pattern",
+      "mcp__serena__initial_instructions",
       "mcp__chrome-devtools__new_page",
       "mcp__chrome-devtools__take_snapshot",
       "mcp__chrome-devtools__take_screenshot",
