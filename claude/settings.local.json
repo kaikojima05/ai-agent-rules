@@ -50,7 +50,11 @@
       "mcp__serena__replace_regex",
       "mcp__serena__replace_content",
       "mcp__serena__insert_after_symbol",
-      "mcp__serena__insert_before_symbol"
+      "mcp__serena__insert_before_symbol",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git cherry-pick:*)"
     ],
     "additionalDirectories": [
     ]
