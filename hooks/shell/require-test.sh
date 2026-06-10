@@ -22,7 +22,7 @@ if
 
   # コードファイルのみ対象（.md, .json, .sh などは対象外）
   case "$EXT" in
-    ts|tsx|js|jsx) ;;
+    ts|js) ;;
     *) exit 0 ;;
   esac
 
