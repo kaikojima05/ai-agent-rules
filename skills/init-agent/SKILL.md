@@ -68,3 +68,10 @@ AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象
 
 - 本リポジトリ（テンプレート元）のファイルは一切変更しない
 - `[agent_name]` の置換漏れがないか、処理後に grep で確認すること
+  - **確認は必ず明示パスで行う**: `grep -rn "\[agent_name\]" AGENTS.md .[agent_name]` のように
+    対象ディレクトリ（`.claude` / `.codex` / `.github` 等）と `AGENTS.md` を直接指定すること
+  - bare な `grep -r ... .`（ルートを `.` 指定）を使ってはならない
+    - Why: エージェント設定ディレクトリと `AGENTS.md` は通常 `.gitignore` で無視されており、
+      Claude Code の `grep` は `ugrep --ignore-files` ラッパーで `.gitignore` を尊重するため、
+      ルート起点の再帰検索は対象ツリーを丸ごとスキップし「置換漏れゼロ」と誤検出する
+    - 迂回したい場合は `command grep -rn ...`（生の grep）を使う
