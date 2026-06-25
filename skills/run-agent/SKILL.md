@@ -20,3 +20,6 @@ disable-model-invocation: true
 ```
 
 ### Step 2: エージェントが @.[agent_name]/prompt/.prompt.md の内容を確認・実行する
+
+- コード実装を伴う場合は、直接書かず **tdd-run スキルのフルフロー**（シナリオ → Red → Green → Refactor）で進める
+- 調査・ドキュメントなど実装を伴わないタスクは通常通り実行する

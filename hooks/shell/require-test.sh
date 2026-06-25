@@ -2,9 +2,20 @@
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name')
 
+# permissionDecision: allow を返して permission prompt をスキップさせる
+allow() {
+  jq -n '{
+    "hookSpecificOutput": {
+      "hookEventName": "PreToolUse",
+      "permissionDecision": "allow"
+    }
+  }'
+  exit 0
+}
+
 # [NOTE]: init-agent 対象
 # copilot cli: if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
-# claude code: if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; then
+# claude code: if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ]; then
 # codex: if [ "$TOOL" = "apply_patch" ]; then
 if 
   FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
@@ -12,8 +23,8 @@ if
   # ファイルパスが取れなければスキップ
   [ -z "$FILE" ] && exit 0
 
-  # テストファイル自体の編集は許可
-  echo "$FILE" | grep -q '\.test\.' && exit 0
+  # テストファイル自体は TDD の Red フェーズ。承認なしで書かせる
+  echo "$FILE" | grep -q '\.test\.' && allow
 
   # 対応するテストファイルが存在するか確認
   DIR=$(dirname "$FILE")
@@ -29,7 +40,7 @@ if
   TEST_FILE="$DIR/$BASE.test.$EXT"
 
   if [ ! -f "$TEST_FILE" ]; then
-    jq -n --arg r "テストファイル($TEST_FILE)が存在しません。TDD規約により、先にテストを作成してください。" \
+    jq -n --arg r "テストファイル($TEST_FILE)が無い状態でのコード実装は禁止です。直接実装せず、tdd-run スキルの TDD フロー（シナリオ → Red → Green → Refactor）に乗せてください。" \
       '{
         "hookSpecificOutput": {
           "hookEventName": "PreToolUse",
@@ -39,6 +50,9 @@ if
       }'
     exit 0
   fi
+
+  # 対応テストがあるコード本体の編集 = 最小実装 / リファクタ適用フェーズ。承認なしで通す
+  allow
 fi
 
 exit 0
