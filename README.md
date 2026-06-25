@@ -24,9 +24,9 @@ ai-agent-rules/
 │   └── validation-pattern.md
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
 │   ├── init-agent/         # [agent_name] と [NOTE] をエージェント種別に応じて解決
-│   ├── re-apply-guideline/ # コンテキスト肥大時に AGENTS.md を再確認させる
 │   ├── compose-prompt/     # 対話を通じてプロンプトを組み立てる
 │   ├── run-agent/          # 構築済みプロンプトに従ってエージェントが作業を実行
+│   ├── tdd-run/            # TDD サイクル（シナリオ→Red→Green→Refactor）を自動連続実行
 │   ├── interview/          # 設計・実装の意図を問いかけ、検討漏れに気づかせる対話
 │   ├── clean-code/         # 変更コードのレビューと修正
 │   ├── context-save/       # コンテキスト保存
@@ -36,7 +36,7 @@ ai-agent-rules/
 ├── hooks/              # フック設定
 │   ├── pre-coding.json     # 編集前フックのテンプレート
 │   └── shell/              # フックから呼ばれるシェルスクリプト
-├── claude/             # Claude Code 用の設定（settings.json 等）
+├── claude/             # Claude Code 用の設定（settings.json, CLAUDE.md 等）
 ├── codex/              # Codex 用の設定（config.toml 等）
 └── copilot/            # GitHub Copilot 用の設定置き場
 ```
@@ -61,3 +61,4 @@ ai-agent-rules/
 
 - 本リポジトリはテンプレートなので、`init-agent` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - `[agent_name]` の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れは grep で確認する。
+- Claude Code は `AGENTS.md` を自動読み込みしない（`CLAUDE.md` のみ）。そのため `claude/CLAUDE.md` に `@AGENTS.md` を置き、配置時にプロジェクトルートへ展開して読ませる。codex/copilot は `AGENTS.md` を直読みするため不要。
