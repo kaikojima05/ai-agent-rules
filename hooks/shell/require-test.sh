@@ -51,8 +51,9 @@ if
     exit 0
   fi
 
-  # 対応テストがあるコード本体の編集 = 最小実装 / リファクタ適用フェーズ。承認なしで通す
-  allow
+  # 対応テストがあるコード本体 = 平時は承認を求める（exit 0 で棄権し permission に委ねる）
+  # tdd-run 実行中のみ、skill スコープの hook が別途 allow を返して自動化する
+  exit 0
 fi
 
 exit 0
