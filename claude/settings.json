@@ -11,5 +11,16 @@
         ]
       }
     ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "filesystem": {
+      "denyWrite": [".git"]
+    },
+    "network": {
+      "allowLocalBinding": true,
+      "allowedDomains": ["localhost"]
+    }
   }
 }
