@@ -62,3 +62,26 @@ ai-agent-rules/
 - 本リポジトリはテンプレートなので、`init-agent` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - `[agent_name]` の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れは grep で確認する。
 - Claude Code は `AGENTS.md` を自動読み込みしない（`CLAUDE.md` のみ）。そのため `claude/CLAUDE.md` に `@AGENTS.md` を置き、配置時にプロジェクトルートへ展開して読ませる。codex/copilot は `AGENTS.md` を直読みするため不要。
+
+## 承認の挙動
+
+このテンプレートを適用すると、エージェントの操作は次のように振り分けられる。
+
+| やろうとすること | どうなる |
+|---|---|
+| ファイルを読む・探す（`ls` `cat` `grep`） | ✅ 自動 |
+| テストファイルを書く（`〇〇.test.ts`） | ✅ 自動 |
+| `tdd-run` 実行中にコードを書く | ✅ 自動 |
+| 自分の localhost サーバーを叩く（`curl` 等） | ✅ 自動 |
+| 普通にコードを書き換える（`tdd-run` 外） | 🙋 確認 |
+| ファイルを消す（`rm`） | 🙋 確認 |
+| ファイルを上書きする（`sed -i`、`cat > 〇〇`） | 🙋 確認 |
+| 外部のサーバーにデータを送る | 🙋 確認 |
+| `git push` / `commit` | 🚫 禁止 |
+
+挙動を決めている実体（想定外の動きをしたらここを見る）:
+
+- 許可 / 確認 / 禁止のコマンド名簿 → `claude/settings.local.json`
+- テストの有無でコード書き込みを判定 → `hooks/shell/require-test.sh`
+- `tdd-run` 中だけの自動承認 → `skills/tdd-run/SKILL.md`（frontmatter hooks）＋ `hooks/shell/allow-coding.sh`
+- 書き込み先・通信先の封じ込め → `claude/settings.json`（sandbox）
