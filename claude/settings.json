@@ -16,7 +16,7 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "filesystem": {
-      "denyWrite": [".git"]
+      "denyWrite": [".git", ".env.*"]
     },
     "network": {
       "allowLocalBinding": true,
