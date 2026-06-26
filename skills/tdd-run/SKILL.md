@@ -3,6 +3,12 @@ name: tdd-run
 description: TDD サイクルを 1 テスト粒度で自動連続実行する。人間が止まるのは「シナリオ提案」「リファクタ提案」「次テスト提案」の 3 ゲートだけ。テスト本体実装・Red 確認・最小実装・Green 確認は承認なしで走る。
 allowed-tools: Read, Edit, Write, Grep, Glob, Shell, AskUserQuestion
 disable-model-invocation: true
+hooks:
+  PreToolUse:
+    - matcher: "Edit|Write"
+      hooks:
+        - type: command
+          command: .claude/hooks/shell/allow-coding.sh
 ---
 
 ## 目的
@@ -114,5 +120,6 @@ commit 準備を促す。
   - 本体コードの 30 行制限超過
   - `require-test.sh` 等の hook による deny
 - **Red のエラー要約と Green の結果は、停止しなくても必ず log に残す。** 「読まなくていい」と「追えなくする」は違う。後から遡れるようにする
-- 承認なしで Write/Edit/テスト実行を走らせるには **settings の allow 設定が前提**（テスト実行コマンド・Edit・Write）。未設定だと自動区間でも permission prompt が出て止まる
+- 承認なしで Write/Edit を走らせる仕掛けは本スキルの frontmatter hooks（`allow-coding.sh`）が担う。平時は `require-test.sh` が対応テストのあるコードを棄権して承認を求め、tdd-run 実行中のみこの hook が allow を返して自動化する
+- テスト実行コマンドは settings の allow が前提（未設定だと自動区間でも permission prompt が出て止まる）
 - 本スキルは `tdd-pattern.md` の従属物。規約が変わったら本スキルより規約が優先
