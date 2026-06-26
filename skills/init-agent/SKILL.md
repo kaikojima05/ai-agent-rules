@@ -66,6 +66,8 @@ AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象
 
 ## 注意事項
 
+- require-test.sh がデフォルトだと構文エラーの為、Edit ツールを使用して編集しようとすると書き込みがブロックされる
+  - Bash 経由で編集を行うこと
 - 本リポジトリ（テンプレート元）のファイルは一切変更しない
 - `[agent_name]` の置換漏れがないか、処理後に grep で確認すること
   - **確認は必ず明示パスで行う**: `grep -rn "\[agent_name\]" AGENTS.md .[agent_name]` のように
