@@ -1,13 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bash:*)",
       "Bash(fi)",
       "Bash(mkdir:*)",
       "Bash(touch:*)",
       "Bash(chmod:*)",
       "Bash(ls:*)",
-      "Bash(find:*)",
       "Bash(cat:*)",
       "Bash(rg:*)",
       "Bash(grep:*)",
@@ -49,6 +47,17 @@
       "mcp__chrome-devtools__fill_form",
       "mcp__chrome-devtools__navigate_page",
       "WebFetch(domain:localhost)"
+    ],
+    "ask": [
+      "Bash(rm:*)",
+      "Bash(rmdir:*)",
+      "Bash(unlink:*)",
+      "Bash(shred:*)",
+      "Bash(mv:*)",
+      "Bash(sed -i:*)",
+      "Bash(dd:*)",
+      "Bash(truncate:*)",
+      "Bash(tee:*)"
     ],
     "deny": [
       "mcp__serena__replace_symbol_body",
