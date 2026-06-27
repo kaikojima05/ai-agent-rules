@@ -9,6 +9,15 @@
             "command": ".claude/hooks/shell/require-test.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/shell/auto-allow-read.sh"
+          }
+        ]
       }
     ]
   },
