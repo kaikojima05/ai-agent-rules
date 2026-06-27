@@ -16,9 +16,15 @@ allow() {
 # 承認なしで許可するコマンド（オプションを足しても書き込み/任意実行ができない read-only のみ）
 ALLOWED=" cd grep rg ls cat head tail wc cut tr pwd basename dirname file stat jq column nl echo printf "
 
-# コマンド置換 / ファイル書き込みリダイレクトがあれば棄権
+# コマンド置換があれば棄権（ダブルクォート内でも実行されうるので元コマンドで判定）
 echo "$CMD" | grep -Eq '\$\(|`' && exit 0
-SANITIZED=$(echo "$CMD" | sed -E 's/[0-9]*>>?[[:space:]]*\/dev\/null//g; s/[0-9]*>&[0-9]//g')
+
+# 以降の構文判定はクォート内文字列を除去してから行う
+# （正規表現中の | や > を区切り・リダイレクトと誤認しないため。許可は広げず誤検出だけ減らす）
+MASKED=$(echo "$CMD" | sed 's/"[^"]*"//g' | sed "s/'[^']*'//g")
+
+# /dev/null 行き・fd 複製の無害なリダイレクトを除去し、残った > は書き込みとみなし棄権
+SANITIZED=$(echo "$MASKED" | sed -E 's/[0-9]*>>?[[:space:]]*\/dev\/null//g; s/[0-9]*>&[0-9]//g')
 echo "$SANITIZED" | grep -q '>' && exit 0
 
 # パイプ・連結・改行で分割し、先頭コマンドが全て許可リストにあるか検査
