@@ -31,6 +31,8 @@ echo "$SANITIZED" | grep -q '>' && exit 0
 set -f
 while IFS= read -r LINE; do
   set -- $LINE
+  # `command`/`builtin` は alias/関数回避目的の透過プレフィックス。剥がして本体コマンドで判定する
+  while [ "${1:-}" = "command" ] || [ "${1:-}" = "builtin" ]; do shift; done
   [ -z "${1:-}" ] && continue
   case "$ALLOWED" in *" $1 "*) ;; *) exit 0 ;; esac
 done <<EOF
