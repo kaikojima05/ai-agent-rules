@@ -1,6 +1,6 @@
 ---
 name: rule-audit
-description: git diff を AGENTS.md / rules/*.md と突き合わせ、規約違反箇所を機械的に列挙する。
+description: git diff を AGENTS.md / rules/**/*.md と突き合わせ、規約違反箇所を機械的に列挙する。
 allowed-tools: Read, Grep, Glob, Shell
 disable-model-invocation: true
 ---
@@ -8,7 +8,7 @@ disable-model-invocation: true
 ## 目的
 
 書きっぱなしになりがちな規約を、エージェントの裁量任せにせず自動で検証する。
-AGENTS.md と `.claude/rules/*.md` の規約と、現在の差分を突き合わせて違反箇所を列挙する役割。
+AGENTS.md と `.claude/rules/**/*.md` の規約と、現在の差分を突き合わせて違反箇所を列挙する役割。
 
 ## 実行フロー
 
@@ -26,10 +26,10 @@ AGENTS.md と `.claude/rules/*.md` の規約と、現在の差分を突き合わ
 
 ### Step 2: 規約を読み込み、構造化する
 
-`.claude/rules/*.md` の構成はリポジトリごとに変わるため **ハードコードしない**。
+`.claude/rules/**/*.md` の構成はリポジトリごとに変わるため **ハードコードしない**。
 毎回 Glob で拾い直すこと。
 
-1. `Glob` で `.claude/rules/*.md` と `AGENTS.md` を全部拾う
+1. `Glob` で `.claude/rules/**/*.md` と `AGENTS.md` を全部拾う
 2. それぞれを `Read` で読み、項目を以下のカテゴリに分類する
   - **禁止事項** — 「〜してはならない」「禁止する」を含む箇条書き
   - **必須事項** — 「必ず〜すること」「〜すること」を含む箇条書き

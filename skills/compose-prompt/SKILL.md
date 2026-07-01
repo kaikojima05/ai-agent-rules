@@ -74,9 +74,9 @@ VALUES
 - @front/features/mypage/resources/bill/components/BillCustomerInvoiceDetails.tsx
 
 ## 参照ルール
-- @.[agent_name]/rules/api-pattern.md
-- @.[agent_name]/rules/tdd-pattern.md
-- @.[agent_name]/rules/ui-pattern.md
+- @.[agent_name]/rules/typescript/api-pattern.md
+- @.[agent_name]/rules/typescript/tdd-pattern.md
+- @.[agent_name]/rules/typescript/ui-pattern.md
 
 ## 完了条件
 - 要件を満たしていること
