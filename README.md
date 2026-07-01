@@ -16,12 +16,14 @@
 ai-agent-rules/
 ├── AGENTS.md           # エージェントが従う最上位の規約
 ├── rules/              # AGENTS.md から分離したパターン別の規約
-│   ├── api-pattern.md
-│   ├── db-pattern.md
-│   ├── function-pattern.md
-│   ├── tdd-pattern.md
-│   ├── ui-pattern.md
-│   └── validation-pattern.md
+│   └── typescript/         # TypeScript プロジェクト固有のルール
+│       ├── api-pattern.md
+│       ├── db-pattern.md
+│       ├── function-pattern.md
+│       ├── date-pattern.md
+│       ├── tdd-pattern.md
+│       ├── ui-pattern.md
+│       └── validation-pattern.md
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
 │   ├── init-agent/         # [agent_name] と [NOTE] をエージェント種別に応じて解決
 │   ├── compose-prompt/     # 対話を通じてプロンプトを組み立てる
