@@ -1,4 +1,7 @@
 #!/bin/bash
+# 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。
+# stderr を捨て、jq 等サブプロセスのエラー文字がツール出力へ混入する経路を断つ。
+exec 2>/dev/null
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name')
 

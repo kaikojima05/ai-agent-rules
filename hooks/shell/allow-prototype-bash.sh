@@ -4,6 +4,9 @@
 # ただし sandbox の denyWrite に登録されたパスに触れるコマンドは自動許可せず ask に回す。
 # denyWrite はプロジェクトごとに育つため、ハードコードせず settings から動的に抽出する。
 # 完全な物理防御は sandbox の denyWrite / CWD 境界（OS 段階）が担う。本 hook はその backstop。
+# 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。
+# stderr を捨て、jq 等サブプロセスのエラー文字がツール出力へ混入する経路を断つ。
+exec 2>/dev/null
 INPUT=$(cat)
 [ "$(echo "$INPUT" | jq -r '.tool_name')" = "Bash" ] || exit 0
 CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
