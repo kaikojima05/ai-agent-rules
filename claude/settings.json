@@ -6,7 +6,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/shell/auto-allow-read.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/deny-inline-eval.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/auto-allow-read.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/guard-overwrite.sh"
           }
         ]
       }
