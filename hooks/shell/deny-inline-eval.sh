@@ -28,25 +28,32 @@ while IFS= read -r LINE; do
   # `command`/`builtin` は alias/関数回避目的の透過プレフィックス。剥がして本体で判定する
   while [ "${1:-}" = "command" ] || [ "${1:-}" = "builtin" ]; do shift; done
   BIN="${1:-}"
-  # 言語ごとに「その場でコードを実行する」eval フラグを対応付ける（無関係な言語は次へ）
+  # 言語ごとに eval フラグと正規スクリプトの拡張子を対応付ける（無関係な言語は次へ）
   case "$BIN" in
-    python|python2|python3) EVAL_FLAGS="-c" ;;
-    node|nodejs)            EVAL_FLAGS="-e --eval -p --print" ;;
-    perl)                   EVAL_FLAGS="-e -E" ;;
-    ruby)                   EVAL_FLAGS="-e" ;;
-    php)                    EVAL_FLAGS="-r" ;;
+    python|python2|python3) EVAL_FLAGS="-c"; SCRIPT_RE='\.py$' ;;
+    node|nodejs)            EVAL_FLAGS="-e --eval -p --print"; SCRIPT_RE='\.[cm]?js$' ;;
+    perl)                   EVAL_FLAGS="-e -E"; SCRIPT_RE='\.pl$' ;;
+    ruby)                   EVAL_FLAGS="-e"; SCRIPT_RE='\.rb$' ;;
+    php)                    EVAL_FLAGS="-r"; SCRIPT_RE='\.php$' ;;
     *) continue ;;
   esac
   shift
-  # 残りの引数に eval フラグ（値がくっついた -c'...' 形も prefix で拾う）があれば拒否する
+  MSG="インライン eval（$BIN の -c/-e 等・stdin・heredoc からのコード実行）は禁止です。JSON/テキスト整形は jq・grep・sed 等の read-only ツールを使い、任意コードが必要ならファイルに書いてから実行してください（例: $BIN script）。書き捨てコードは痕跡が残らず、承認の乱発と乱用の温床になるため。"
+  # 正規スクリプトファイル / -m module を伴うなら「ファイル実行」とみなし eval 判定から外す
+  HAS_SCRIPT=0
   for arg in "$@"; do
+    case "$arg" in -m|-m*) HAS_SCRIPT=1 ;; -*) ;; *) echo "$arg" | grep -Eq "$SCRIPT_RE" && HAS_SCRIPT=1 ;; esac
+    # `-`(stdin をプログラムとして読む) と eval フラグ（-c'...' の連結形も prefix で拾う）を拒否
+    [ "$arg" = "-" ] && deny "$MSG"
     for flag in $EVAL_FLAGS; do
-      case "$arg" in
-        "$flag"|"$flag"*)
-          deny "インライン eval（$BIN $flag …）は禁止です。JSON/テキスト整形は jq・grep・sed 等の read-only ツールを使い、どうしても任意スクリプトが必要ならファイルに書いてから実行してください（例: $BIN script.py）。書き捨てコードは痕跡が残らず、承認の乱発と乱用の温床になるため。" ;;
-      esac
+      case "$arg" in "$flag"|"$flag"*) deny "$MSG" ;; esac
     done
   done
+  # スクリプト無しで stdin からコードを食う形（bare 起動=パイプ先 / heredoc）を拒否する
+  if [ "$HAS_SCRIPT" = 0 ]; then
+    [ "$#" -eq 0 ] && deny "$MSG"
+    echo "$LINE" | grep -q '<<' && deny "$MSG"
+  fi
 done <<EOF
 $(echo "$MASKED" | sed -E 's/&&/\n/g; s/\|\|/\n/g' | tr '|;' '\n')
 EOF
