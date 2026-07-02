@@ -36,29 +36,21 @@ disable-model-invocation: true
 
 上記以外の引数が渡された場合は、ユーザーに置換値とディレクトリ名を確認する。
 
-### Step 3: `[agent_name]` を置換する
+### Step 3: 置換スクリプトを実行する
 
-AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象に、`[agent_name]` を Step 2 で決定した置換値（例: `claude`, `github`, `codex`）に置換する。
+`[agent_name]` の置換と `[NOTE]: init-agent 対象` の解決は、配置済みの決定的スクリプトに委ねる。Bash の sed / heredoc / インタプリタで手作業でファイルを書き換えてはならない。
 
-テンプレート内では `@.[agent_name]/...` や `./.[agent_name]/...` のように **dot は placeholder の外側** に置く規約とする。dot を含めて置換しないこと。
+```
+bash .[agent_name]/skills/init-agent/init-agent.sh <agent>
+```
 
-ただし、frontmatter の `description:` 行のように bare `[agent_name]/...` で書かれている箇所は、テンプレート側のスタイル不統一のため、置換後に手で `.claude/...` のような形へ整形する（または、テンプレート側を `.[agent_name]/...` に統一しておく）。
+- `<agent>` は Step 2 で特定した種別（`claude` / `github` / `codex`）。呼び出し時は `.[agent_name]` を実際の配置ディレクトリ（例: `.claude`）に読み替える
+- スクリプトが自動で行うこと:
+  - 配置ツリー配下で `[agent_name]` を含む全ファイルを検出して置換する（`.[agent_name]/...` の dot は placeholder の外なので保持される。`init-agent/` 配下は説明・処理本体のため除外）
+  - `require-test.sh` / `allow-coding.sh` の `[NOTE]` ブロックを、種別ごとの確定条件へ畳む（claude/github/codex の条件はスクリプトの `case` を唯一の真実とする）
+- 上記3種以外を扱う場合は、スクリプトの `case` に分岐を追加してから実行する
 
-なお、本ファイル（`init-agent/SKILL.md`）自身は placeholder の概念を説明する文書のため、置換対象から除外すること。
-
-### Step 4: `[NOTE]: init-agent 対象` を解決する
-
-ファイル内に `[NOTE]: init-agent 対象` コメントがある箇所を、エージェント種別に応じて適切な実装に書き換える。
-
-#### hooks/shell/require-test.sh
-
-エージェント種別に応じて条件式を確定させる:
-
-- **claude**: `if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ] || [ "$TOOL" = "MultiEdit" ]; then`
-- **github**: `if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then`
-- **codex**: `if [ "$TOOL" = "apply_patch" ]; then`
-
-`[NOTE]` コメント行と未使用の選択肢コメントは削除し、確定した条件式のみを残す。
+Why: 置換は完全に決定的な処理であり、その都度インタプリタでコードを書き捨てると承認の乱発とツール間の差分の温床になる。レビュー済みの1スクリプトへ固定すれば、一度許可すれば以降は承認なしで再実行できる。
 
 ### Step 5: 結果を報告する
 
@@ -66,11 +58,10 @@ AGENTS.md と同階層の skills/, hooks/, rules/ 内の全ファイルを対象
 
 ## 注意事項
 
-- require-test.sh がデフォルトだと構文エラーの為、Edit ツールを使用して編集しようとすると書き込みがブロックされる
-  - Bash 経由で編集を行うこと
-- 本リポジトリ（テンプレート元）のファイルは一切変更しない
+- 本リポジトリ（テンプレート元）のファイルは一切変更しない。スクリプトは配置済みツリー（`.claude` / `.codex` / `.github`）のみを対象とする
 - `[agent_name]` の置換漏れがないか、処理後に grep で確認すること
-  - **確認は必ず明示パスで行う**: `grep -rn "\[agent_name\]" AGENTS.md .[agent_name]` のように
+  - `init-agent/` 配下は placeholder をあえて残す（スキル自身の説明・処理本体のため）。確認時は `| grep -v /init-agent/` で除外する
+  - **確認は必ず明示パスで行う**: `command grep -rn "\[agent_name\]" AGENTS.md .[agent_name] | grep -v /init-agent/` のように
     対象ディレクトリ（`.claude` / `.codex` / `.github` 等）と `AGENTS.md` を直接指定すること
   - bare な `grep -r ... .`（ルートを `.` 指定）を使ってはならない
     - Why: エージェント設定ディレクトリと `AGENTS.md` は通常 `.gitignore` で無視されており、

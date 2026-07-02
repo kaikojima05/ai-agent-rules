@@ -17,6 +17,7 @@
       "Bash(yarn:*)",
       "Bash(curl:*)",
       "Bash(cd:*)",
+      "Bash(bash .claude/skills/init-agent/init-agent.sh:*)",
       "mcp__serena__check_onboarding_performed",
       "mcp__serena__onboarding",
       "mcp__serena__list_dir",
