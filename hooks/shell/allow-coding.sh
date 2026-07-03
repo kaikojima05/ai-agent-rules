@@ -16,6 +16,11 @@ if
   FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
   [ -z "$FILE" ] && exit 0
 
+  # テストファイル自体は TDD の Red フェーズ＝無条件で allow。require-test.sh と同一判定を
+  # 最終 hook である本 hook でも返す。複数 hook の集約は最後に走った hook の判定が効くため、
+  # allow を先行 hook(require-test) だけが返し本 hook が無出力だと打ち消されて prompt 化する
+  echo "$FILE" | grep -q '\.test\.' && { jq -n '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'; exit 0; }
+
   # 許可条件: 対応するテストファイルがあるコード本体なら承認なしで通す
   DIR=$(dirname "$FILE")
   BASE=$(basename "$FILE" | sed 's/\.[^.]*$//')
