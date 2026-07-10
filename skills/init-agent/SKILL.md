@@ -47,7 +47,7 @@ bash .[agent_name]/skills/init-agent/init-agent.sh <agent>
 - `<agent>` は Step 2 で特定した種別（`claude` / `github` / `codex`）。呼び出し時は `.[agent_name]` を実際の配置ディレクトリ（例: `.claude`）に読み替える
 - スクリプトが自動で行うこと:
   - 配置ツリー配下で `[agent_name]` を含む全ファイルを検出して置換する（`.[agent_name]/...` の dot は placeholder の外なので保持される。`init-agent/` 配下は説明・処理本体のため除外）
-  - `require-test.sh` / `allow-coding.sh` の `[NOTE]` ブロックを、種別ごとの確定条件へ畳む（claude/github/codex の条件はスクリプトの `case` を唯一の真実とする）
+  - `require-test.sh` の `[NOTE]` ブロックを、種別ごとの確定条件へ畳む（claude/github/codex の条件はスクリプトの `case` を唯一の真実とする）
 - 上記3種以外を扱う場合は、スクリプトの `case` に分岐を追加してから実行する
 
 Why: 置換は完全に決定的な処理であり、その都度インタプリタでコードを書き捨てると承認の乱発とツール間の差分の温床になる。レビュー済みの1スクリプトへ固定すれば、一度許可すれば以降は承認なしで再実行できる。

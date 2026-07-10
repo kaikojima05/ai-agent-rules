@@ -11,30 +11,37 @@ disable-model-invocation: true
 
 ## ガイドライン
 
+### 実行方法（共通）
+
+1. `package.json` の scripts に該当タスク（`format` / `lint` / `typecheck` 等）があれば **script 経由**（`yarn <script>`）を最優先で使うこと
+2. script が無い場合のみ、下記の `node_modules/.bin/<tool>` を直接実行すること
+3. **`npx` での起動は禁止**（未導入だと registry へ取りに行くため hook が deny する。`tdd-pattern.md` の test script 規約と同根）
+4. ツールが未導入（`node_modules/.bin` に無い）場合は install せず、ユーザーに相談すること（install 系も deny される）
+
 ### コード整形
 
 プロジェクトの構成を確認し、以下のいずれかの設定ファイルに基づいて整形を実行すること。
 
 - **Prettier**: `.prettierrc` (または関連設定ファイル) を検知した場合
-  - 設定ファイルが存在するディレクトリにて `npx prettier --write .` を実行する。
+  - 設定ファイルが存在するディレクトリにて `node_modules/.bin/prettier --write .` を実行する。
 - **Biome**: `biome.json` を検知した場合
-  - 設定ファイルが存在するディレクトリにて `npx biome format --write .` を実行する。
+  - 設定ファイルが存在するディレクトリにて `node_modules/.bin/biome format --write .` を実行する。
 
 ### 静的解析・修正
 
 プロジェクトの構成を確認し、以下のいずれかの設定ファイルに基づいて修正を実行すること。
 
 - **ESLint**: `.eslintrc.js` または `.eslintrc.json` を検知した場合
-  - 設定ファイルが存在するディレクトリにて `npx eslint . --fix` を実行する。
+  - 設定ファイルが存在するディレクトリにて `node_modules/.bin/eslint . --fix` を実行する。
 - **Biome**: `biome.json` を検知した場合
-  - 設定ファイルが存在するディレクトリにて `npx biome lint --apply .` を実行する。
+  - 設定ファイルが存在するディレクトリにて `node_modules/.bin/biome lint --apply .` を実行する。
 - **typecheck**: `tsconfig.json` を検知した場合
-  - ESLint or Biome の設定ファイルが存在しなかった場合は、tsconfig.json が存在するディレクトリにて `npx tsc --noEmit` を実行する。
+  - ESLint or Biome の設定ファイルが存在しなかった場合は、tsconfig.json が存在するディレクトリにて `node_modules/.bin/tsc --noEmit` を実行する。
 
 ### DBスキーマの整形
 
 - **Prisma**: `prisma/schema.prisma` を検知した場合
-  - 設定ファイルが存在するディレクトリにて `npx prisma format` を実行する。
+  - 設定ファイルが存在するディレクトリにて `node_modules/.bin/prisma format` を実行する。
 
 ## 注意事項
 - 実行前に必ず設定ファイルの有無を確認し、プロジェクトに最適なツールを選択すること。

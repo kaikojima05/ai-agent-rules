@@ -1,6 +1,6 @@
 #!/bin/bash
-# prototype スキル稼働中の Edit|Write 判定。
-# テストファイルは禁止(deny)、それ以外のコードはテスト無しでも承認なしで許可(allow)。
+# prototype スキル稼働中の Edit|Write 判定。テストファイルのみ禁止(deny)する deny 専任 hook。
+# それ以外は棄権し、自動化は settings の allow(Edit(**)/Write(**)) が担う。
 # Why: プロトタイプ段階で雑なテストを残すと、後で残すべき正規テストか判別できなくなるため。
 # 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。
 # stderr を捨て、jq 等サブプロセスのエラー文字がツール出力へ混入する経路を断つ。
@@ -16,6 +16,5 @@ if echo "$FILE" | grep -q '\.test\.'; then
   exit 0
 fi
 
-# それ以外のコードはテスト無しでも承認なしで許可
-jq -n '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'
+# それ以外は棄権して settings に委ねる（hook が allow を配ると密度の定義が二重化する）
 exit 0

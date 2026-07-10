@@ -5,16 +5,10 @@ exec 2>/dev/null
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name')
 
-# permissionDecision: allow を返して permission prompt をスキップさせる
-allow() {
-  jq -n '{
-    "hookSpecificOutput": {
-      "hookEventName": "PreToolUse",
-      "permissionDecision": "allow"
-    }
-  }'
-  exit 0
-}
+# 本 hook は deny(執行)専任。allow は返さない — ask/deny ルールは hook の allow より
+# 常に優先される(公式仕様)ので素通りの危険は無いが、自動化は settings.local.json の
+# allow(Edit(**)/Write(**)) が既に担っており、hook 側の allow は密度の定義を二重化する
+# だけの死荷重になるため。
 
 # [NOTE]: init-agent 対象
 # copilot cli: if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
@@ -26,15 +20,17 @@ if
   # ファイルパスが取れなければスキップ
   [ -z "$FILE" ] && exit 0
 
-  # テストファイル自体は TDD の Red フェーズ。承認なしで書かせる
-  echo "$FILE" | grep -q '\.test\.' && allow
+  # テストファイル自体は TDD の Red フェーズ。deny 対象外(棄権して settings に委ねる)
+  echo "$FILE" | grep -q '\.test\.' && exit 0
 
   # 対応するテストファイルが存在するか確認
   DIR=$(dirname "$FILE")
   BASE=$(basename "$FILE" | sed 's/\.[^.]*$//')
   EXT=$(basename "$FILE" | sed 's/^.*\.//')
 
-  # コードファイルのみ対象（.md, .json, .sh などは対象外）
+  # ロジックファイル(ts/js)のみ対象。tsx/jsx は意図的な除外 — コンポーネントのテストは
+  # モックや {} での辻褄合わせに堕ちやすく強制する価値が薄いため、テストを門前払いの
+  # 条件にしない(書きたければ tdd-run に任意で乗せられる)。.md .json .sh 等も対象外
   case "$EXT" in
     ts|js) ;;
     *) exit 0 ;;
@@ -54,8 +50,8 @@ if
     exit 0
   fi
 
-  # 対応テストがあるコード本体 = 平時は承認を求める（exit 0 で棄権し permission に委ねる）
-  # tdd-run 実行中のみ、skill スコープの hook が別途 allow を返して自動化する
+  # 対応テストがあるコード本体 = 棄権して settings の permission 層に委ねる。
+  # 自動化(allow Edit(**)/Write(**))も停止(ask: auth/migrations 等)も settings が決める
   exit 0
 fi
 

@@ -72,18 +72,24 @@ ai-agent-rules/
 | やろうとすること | どうなる |
 |---|---|
 | ファイルを読む・探す（`ls` `cat` `grep`） | ✅ 自動 |
-| テストファイルを書く（`〇〇.test.ts`） | ✅ 自動 |
-| `tdd-run` 実行中にコードを書く | ✅ 自動 |
+| 通常ファイルを書き換える（コード・テスト・ドキュメント） | ✅ 自動 |
 | 自分の localhost サーバーを叩く（`curl` 等） | ✅ 自動 |
-| 普通にコードを書き換える（`tdd-run` 外） | 🙋 確認 |
-| ファイルを消す（`rm`） | 🙋 確認 |
-| ファイルを上書きする（`sed -i`、`cat > 〇〇`） | 🙋 確認 |
+| 依存を触る（`package.json` / lockfile） | 🙋 確認 |
+| CI/CD・インフラを触る（`.github/workflows` `Dockerfile` `*.tf`） | 🙋 確認 |
+| DB の不可逆変更（`migrations/` `schema.prisma`） | 🙋 確認 |
+| 復元できない全上書き（未コミット差分あり / git 管理外） | 🙋 確認 |
+| ファイルを消す（`rm`）・シェルで上書きする（`sed -i` 等） | 🙋 確認 |
 | 外部のサーバーにデータを送る | 🙋 確認 |
-| `git push` / `commit` | 🚫 禁止 |
+| 契約に従うコミット（`[claude]: {ファイル名}/{内容}`・1 ファイル単位） | ✅ 自動 |
+| `tdd-run` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
+| `.env` / `.git/` / `.claude/` を書き換える | 🚫 禁止 |
+| 契約に反するコミット（prefix 無し・`-a` 一括・AI 署名・`--amend`） | 🚫 禁止 |
+| `git push`、依存の install / add | 🚫 禁止 |
 
 挙動を決めている実体（想定外の動きをしたらここを見る）:
 
-- 許可 / 確認 / 禁止のコマンド名簿 → `claude/settings.local.json`
-- テストの有無でコード書き込みを判定 → `hooks/shell/require-test.sh`
-- `tdd-run` 中だけの自動承認 → `skills/tdd-run/SKILL.md`（frontmatter hooks）＋ `hooks/shell/allow-coding.sh`
+- 許可 / 確認 / 禁止の名簿（コマンドと書き込みパスのリスク分類） → `claude/settings.local.json`
+- テストの有無でコード書き込みを判定（`tdd-run` 稼働中のみ deny） → `hooks/shell/require-test.sh`（`skills/tdd-run/SKILL.md` の frontmatter hooks で起動）
+- 復元できない全上書きだけ確認に通す → `hooks/shell/guard-overwrite.sh`
+- コミット契約（`[claude]:` 形式・1 ファイル単位・AI 署名禁止）の執行 → `hooks/shell/enforce-claude-commit.sh`
 - 書き込み先・通信先の封じ込め → `claude/settings.json`（sandbox）
