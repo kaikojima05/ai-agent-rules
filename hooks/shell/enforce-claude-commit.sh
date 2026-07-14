@@ -3,6 +3,11 @@
 # 契約: 1 ファイル = 1 コミット / メッセージは「[claude]: {対象ファイル名}/{変更内容(日本語)}」/
 #       author は常にユーザー本人の git config identity（AI を author・co-author に混ぜない）。
 # 本 hook は deny 専任。適合するコミットの自動化は settings の allow(Bash(git commit:*)) が担う。
+# 例外(squash): 未 push 範囲のコミット整理は rebase-squash スキルの決定的スクリプトのみが行い、
+#       squash 後のメッセージは「[claude]: {機能}/{変更内容(日本語)}」とする(形式 regex は共通)。
+#       スクリプト内部の git commit は Bash コマンド文字列に現れず本 hook の視界外のため、
+#       同スクリプトが契約検証(形式・--author 不在・AI 署名不在)を内蔵する。
+#       生の履歴書き換えコマンドの deny は deny-history-rewrite.sh が担う。
 # 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。stderr を捨てる。
 exec 2>/dev/null
 INPUT=$(cat)
