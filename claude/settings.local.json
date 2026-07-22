@@ -31,8 +31,7 @@
       "WebFetch(domain:localhost)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Edit(**)",
-      "Write(**)"
+      "Edit(**)"
     ],
     "ask": [
       "Bash(rm:*)",
@@ -45,19 +44,12 @@
       "Bash(truncate:*)",
       "Bash(tee:*)",
       "Edit(**/package.json)",
-      "Write(**/package.json)",
       "Edit(.github/workflows/**)",
-      "Write(.github/workflows/**)",
       "Edit(**/migrations/**)",
-      "Write(**/migrations/**)",
       "Edit(**/schema.prisma)",
-      "Write(**/schema.prisma)",
       "Edit(**/Dockerfile*)",
-      "Write(**/Dockerfile*)",
       "Edit(**/docker-compose*)",
-      "Write(**/docker-compose*)",
-      "Edit(**/*.tf)",
-      "Write(**/*.tf)"
+      "Edit(**/*.tf)"
     ],
     "deny": [
       "mcp__serena__replace_symbol_body",
@@ -68,24 +60,17 @@
       "Bash(git push:*)",
       "Bash(git cherry-pick:*)",
       "Edit(**/.env*)",
-      "Write(**/.env*)",
       "Edit(**/yarn.lock)",
-      "Write(**/yarn.lock)",
       "Edit(**/package-lock.json)",
-      "Write(**/package-lock.json)",
       "Edit(**/pnpm-lock.yaml)",
-      "Write(**/pnpm-lock.yaml)",
       "Edit(**/.git/**)",
-      "Write(**/.git/**)",
-      "Edit(.claude/**)",
-      "Write(.claude/**)"
+      "Edit(.claude/**)"
     ],
-    "additionalDirectories": [
-    ]
+    "additionalDirectories": []
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "serena",
-    "chrom-devtools"
+    "chrome-devtools"
   ]
 }
