@@ -3,10 +3,14 @@
 # 契約: コミット履歴の書き換えは禁止。唯一の例外は rebase-squash スキルの決定的スクリプト
 #       （未 push 範囲・backup 作成・tree 同一性検証を条件とする squash）。
 #       スクリプトの呼び出しは git コマンドではないため本 hook には掛からず、
-#       sandbox(denyWrite .git) + permission prompt の承認フローに乗る。
+#       settings.local.json の ask ルール（人間の承認）に乗る。
+#       ※ かつては sandbox(denyWrite .git) が暗黙のゲートだったが、denyWrite を
+#         .git/hooks と .git/config に絞ったため、ask ルールが明示的なゲートを引き継いだ。
 # 役割分担: git commit --amend の deny は enforce-claude-commit.sh が担う。
 #       git reset --hard は履歴書き換えではなく作業ツリー破壊なので対象外（ask 層が担う）。
-# 本 hook はコマンド文字列検査のトリップワイヤであり、迂回への最終防壁は sandbox + ask 層。
+#       .git ディレクトリ自体を狙う破壊系コマンドの deny は protect-git-dir.sh が担う。
+# 本 hook はコマンド文字列検査のトリップワイヤであり、迂回への最終防壁は
+# ask 層と push 済み履歴（sandbox が守るのは .git/hooks と .git/config のみ）。
 # 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。stderr を捨てる。
 exec 2>/dev/null
 INPUT=$(cat)
