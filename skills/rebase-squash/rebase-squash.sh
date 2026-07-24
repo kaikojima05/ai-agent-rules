@@ -152,17 +152,10 @@ while [ "$gi" -lt "$NGROUPS" ]; do
     die "group $((gi + 1))「${SUBJECT}」は変更が相殺されて空。revert とその対象は同一グループに入れないこと"
   fi
 
-  # body には元 subject 一覧を機械生成で残す(何をまとめたか履歴から追えるように)。
+  # commit message は plan の subject 1 行のみ(body は付けない)。
   # --no-verify: 内容は元コミット時点で hook 通過済みの内容保存変換であり、
   # 配布先の commit hook(フォーマッタ等)が tree を書き換えると検証が壊れるため
-  {
-    echo "$SUBJECT"
-    echo
-    echo "Squashed:"
-    for sha in $GROUP_ORDERED; do
-      echo "- $(git log -1 --format=%s "$sha")"
-    done
-  } | git -C "$WT" commit --quiet --no-verify -F - || { cleanup; die "commit に失敗: group $((gi + 1))「${SUBJECT}」"; }
+  git -C "$WT" commit --quiet --no-verify -m "$SUBJECT" || { cleanup; die "commit に失敗: group $((gi + 1))「${SUBJECT}」"; }
 
   gi=$((gi + 1))
 done

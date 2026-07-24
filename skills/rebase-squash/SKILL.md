@@ -103,5 +103,6 @@ squash 後の履歴・backup ブランチ名・検証結果（tree 一致 / exac
   tree 同一性検証が壊れるため
 - author date は失われる（squash とは元々そういう操作）。identity は git config の本人のまま、
   Co-Authored-By 等の AI 署名は入らない — enforce-claude-commit.sh と同じ契約をスクリプトが内蔵する
-- body には `Squashed:` として元 subject 一覧が機械生成で残る。何をまとめたかは履歴から追える
+- commit message は plan の subject 1 行のみで body は付けない。何をまとめたかを元履歴で
+  確認できるのは backup ブランチが残っている間だけ
 - 本スキルは AGENTS.md「Git 運用」の従属物。規約が変わったら本スキルより規約が優先
