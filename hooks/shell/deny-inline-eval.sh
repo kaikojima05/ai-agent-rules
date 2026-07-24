@@ -28,10 +28,14 @@ while IFS= read -r LINE; do
   # `command`/`builtin` は alias/関数回避目的の透過プレフィックス。剥がして本体で判定する
   while [ "${1:-}" = "command" ] || [ "${1:-}" = "builtin" ]; do shift; done
   BIN="${1:-}"
+  # パス経由の起動（./node_modules/.bin/tsx や /usr/bin/python3 等）をすり抜けさせないため、
+  # 判定はフルトークンではなく basename で行う
+  BIN_BASE="${BIN##*/}"
   # 言語ごとに eval フラグと正規スクリプトの拡張子を対応付ける（無関係な言語は次へ）
-  case "$BIN" in
+  case "$BIN_BASE" in
     python|python2|python3) EVAL_FLAGS="-c"; SCRIPT_RE='\.py$' ;;
     node|nodejs)            EVAL_FLAGS="-e --eval -p --print"; SCRIPT_RE='\.[cm]?js$' ;;
+    tsx|ts-node)            EVAL_FLAGS="-e --eval -p --print"; SCRIPT_RE='\.[cm]?[jt]sx?$' ;;
     perl)                   EVAL_FLAGS="-e -E"; SCRIPT_RE='\.pl$' ;;
     ruby)                   EVAL_FLAGS="-e"; SCRIPT_RE='\.rb$' ;;
     php)                    EVAL_FLAGS="-r"; SCRIPT_RE='\.php$' ;;
