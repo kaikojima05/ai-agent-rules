@@ -40,6 +40,9 @@ disable-model-invocation: true
 bash .[agent_name]/skills/compose-prompt/apply-prompt.sh <ドラフトのパス>
 ```
 
+- Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る（sandbox 内では denyWrite の `.[agent_name]` に阻まれて必ず失敗する）
+- それでも「Operation not permitted」で失敗した場合は `excludedCommands` 未設定の古い配置なので、sandbox を無効化して再実行し、`settings.json` の更新をユーザーに案内すること
+
 ## .prompt.md の基本構成
 
 基本構成通りにプロンプトを構築する必要はないが、下記のルールは遵守すること。

@@ -49,6 +49,10 @@
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
+    "excludedCommands": [
+      "bash .claude/skills/init-agent/init-agent.sh *",
+      "bash .claude/skills/compose-prompt/apply-prompt.sh *"
+    ],
     "filesystem": {
       "denyWrite": [".git/hooks", ".git/config", ".env.*", ".claude"]
     },

@@ -49,6 +49,9 @@ bash .[agent_name]/skills/init-agent/init-agent.sh <agent>
   - 配置ツリー配下で `[agent_name]` を含む全ファイルを検出して置換する（`.[agent_name]/...` の dot は placeholder の外なので保持される。`init-agent/` 配下は説明・処理本体のため除外）
   - `require-test.sh` の `[NOTE]` ブロックを、種別ごとの確定条件へ畳む（claude/github/codex の条件はスクリプトの `case` を唯一の真実とする）
 - 上記3種以外を扱う場合は、スクリプトの `case` に分岐を追加してから実行する
+- Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る（permission は `settings.local.json` の事前 allow が担保するため承認プロンプトは出ない）
+  - Why: 対象ツリー（`.claude/` 等）は sandbox の denyWrite で保護されており、sandbox 内での実行は必ず「Operation not permitted」で失敗する。失敗→sandbox 外で再実行という二度手間を踏まないための除外設定である
+  - それでも「Operation not permitted」で失敗した場合は `excludedCommands` 未設定の古い配置なので、sandbox を無効化して再実行し、`settings.json` の更新をユーザーに案内すること
 
 Why: 置換は完全に決定的な処理であり、その都度インタプリタでコードを書き捨てると承認の乱発とツール間の差分の温床になる。レビュー済みの1スクリプトへ固定すれば、一度許可すれば以降は承認なしで再実行できる。
 
