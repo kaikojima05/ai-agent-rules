@@ -1,0 +1,142 @@
+#!/bin/bash
+# テンプレート全体の回帰テスト。hook・スキル・配布設定を変更したら必ず走らせること。
+#   bash tests/verify-all.sh
+# 検証内容: 構文 / 実行ビット / claude 配置シム / hook 全数(run-tests.sh) /
+#           rebase-squash E2E / codex 配置シム / skill-session スコープ / 残渣チェック
+# 作業ファイルは一時ディレクトリに作りリポジトリを汚さない（終了時に自動削除）。
+set -u
+SUITE="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$SUITE/.." && pwd)"
+S=$(mktemp -d "${TMPDIR:-/tmp}/ai-agent-rules-verify.XXXXXX") || { echo "temp dir を作れない" >&2; exit 1; }
+trap 'rm -rf "$S"' EXIT
+PASS=0; FAIL=0
+ok(){ PASS=$((PASS+1)); echo "ok   $1"; }
+ng(){ FAIL=$((FAIL+1)); echo "FAIL $1"; }
+
+command -v jq >/dev/null 2>&1 || { echo "jq が必要" >&2; exit 1; }
+
+echo "== 1. 構文チェック（require-test.sh は [NOTE] 未解決のため配置後に検査） =="
+for f in "$REPO"/hooks/shell/*.sh "$REPO"/skills/*/*.sh "$SUITE"/*.sh; do
+  case "$f" in */require-test.sh|*/verify-all.sh) continue ;; esac
+  if bash -n "$f" 2>/dev/null; then ok "syntax: $(basename "$f")"; else ng "syntax: $f"; fi
+done
+echo "== 1.5 実行ビット（ハーネスが直接実行する hook は +x 必須。hook-io.sh は source 専用） =="
+for f in "$REPO"/hooks/shell/*.sh; do
+  case "$f" in */hook-io.sh) continue ;; esac
+  [ -x "$f" ] && ok "exec bit: $(basename "$f")" || ng "exec bit 無し: $(basename "$f")"
+done
+
+echo "== 2. claude 配置シミュレーション =="
+mkdir -p "$S/claude-sim/.claude"
+cp "$REPO/AGENTS.md" "$S/claude-sim/"
+cp -R "$REPO/hooks" "$S/claude-sim/.claude/hooks"
+cp -R "$REPO/skills" "$S/claude-sim/.claude/skills"
+cp -R "$REPO/rules" "$S/claude-sim/.claude/rules"
+cd "$S/claude-sim"
+if bash .claude/skills/init-agent/init-agent.sh claude > init-claude.log 2>&1; then ok "init-agent claude 実行"; else ng "init-agent claude 実行"; cat init-claude.log; fi
+bash -n .claude/hooks/shell/require-test.sh 2>/dev/null && ok "解決後 require-test 構文" || ng "解決後 require-test 構文"
+grep -q 'HOOK_AGENT="claude"' .claude/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=claude" || ng "hook-io HOOK_AGENT=claude"
+grep -q '`\[claude\]: {対象ファイル名}/{変更内容}`' AGENTS.md && ok "AGENTS.md コミットタグ確定" || ng "AGENTS.md コミットタグ確定"
+grep -q 'AGENT_TAG="claude"' .claude/skills/rebase-squash/rebase-squash.sh && ok "rebase-squash AGENT_TAG=claude" || ng "rebase-squash AGENT_TAG=claude"
+grep -q 'bash .claude/skills/rebase-squash/rebase-squash.sh' .claude/skills/rebase-squash/SKILL.md && ok "[skills_root]→.claude/skills" || ng "[skills_root]→.claude/skills"
+LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
+[ "$LEFT" = "0" ] && ok "置換漏れゼロ(claude)" || { ng "置換漏れ $LEFT 件(claude)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude | grep -v '/init-agent/'; }
+
+echo "== 3. hook 全数テスト（claude 配置） =="
+cp "$SUITE/run-tests.sh" "$S/claude-sim/run-tests.sh"
+bash "$S/claude-sim/run-tests.sh" > hook-tests.out 2>&1
+tail -3 hook-tests.out
+grep -q '^PASS=[0-9]* FAIL=0$' hook-tests.out && ok "hook 全数テスト全緑" || { ng "hook 全数テストに失敗あり"; grep '^FAIL' hook-tests.out; }
+
+echo "== 4. rebase-squash E2E =="
+RS="$S/claude-sim/.claude/skills/rebase-squash/rebase-squash.sh"
+mkdir "$S/rs" && cd "$S/rs"
+git init -q && git config user.email tester@example.com && git config user.name tester
+echo base > base.txt && git add base.txt && git commit -qm "chore: base"
+echo 1 > f1.ts && git add f1.ts && git commit -qm "[claude]: f1.ts/f1を追加した"
+echo 2 > f1.test.ts && git add f1.test.ts && git commit -qm "[claude]: f1.test.ts/f1のテストを追加した"
+echo 3 > f2.ts && git add f2.ts && git commit -qm "[claude]: f2.ts/f2を追加した"
+BASE=$(git rev-parse HEAD~3)
+if bash "$RS" --check --base "$BASE" > check.out 2>&1; then ok "--check 成功"; else ng "--check 失敗"; cat check.out; fi
+grep -q "COMMITS 3" check.out && ok "対象3件を認識" || ng "対象件数が不正"
+EB=$(grep '^BASE ' check.out | cut -d' ' -f2)
+C1=$(git rev-parse HEAD~2); C2=$(git rev-parse HEAD~1); C3=$(git rev-parse HEAD)
+printf '{"base":"%s","groups":[{"subject":"[claude]: f1/f1と対応テストを追加した","commits":["%s","%s"]},{"subject":"[claude]: f2.ts/f2を追加した","commits":["%s"]}]}\n' "$EB" "$C1" "$C2" "$C3" > plan.json
+TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
+if bash "$RS" plan.json --base "$BASE" > run.out 2>&1; then ok "squash 実行"; else ng "squash 失敗"; cat run.out; fi
+[ "$(git rev-list --count "$EB..HEAD")" = "2" ] && ok "3→2 コミットへ縮約" || ng "コミット数が不正"
+[ "$(git rev-parse 'HEAD^{tree}')" = "$TREE_BEFORE" ] && ok "tree 同一性" || ng "tree が変わった"
+git branch --list 'backup/rebase-squash-*' | grep -q . && ok "backup ブランチ存在" || ng "backup が無い"
+if bash "$RS" plan.json --base "$BASE" > again.out 2>&1; then ng "base 不一致 plan が通ってしまった"; else ok "base 不一致 plan を拒否"; fi
+printf '{"base":"%s","groups":[{"subject":"タグ無し不正subject","commits":["%s"]}]}\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD)" > bad.json
+if bash "$RS" bad.json --base "$(git rev-parse 'HEAD~1')" > bad.out 2>&1; then ng "不正 subject が通ってしまった"; else ok "不正 subject を拒否"; fi
+echo 4 > f3.ts && git add f3.ts && git commit -qm "manual: 手動変更"
+echo 5 > f4.ts && git add f4.ts && git commit -qm "[claude]: f4.ts/f4を追加した"
+bash "$RS" --check --base "$BASE" > b2.out 2>&1
+grep -q "COMMITS 1" b2.out && ok "非タグコミットを境界として認識" || { ng "境界判定が不正"; cat b2.out; }
+
+echo "== 5. codex 配置シミュレーション（skills は .agents/skills） =="
+mkdir -p "$S/codex-sim/.codex" "$S/codex-sim/.agents"
+cp "$REPO/AGENTS.md" "$S/codex-sim/"
+cp -R "$REPO/hooks" "$S/codex-sim/.codex/hooks"
+cp -R "$REPO/rules" "$S/codex-sim/.codex/rules"
+cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
+cd "$S/codex-sim"
+if bash .agents/skills/init-agent/init-agent.sh codex > init-codex.log 2>&1; then ok "init-agent codex 実行"; else ng "init-agent codex 実行"; cat init-codex.log; fi
+grep -q '`\[codex\]: {対象ファイル名}/{変更内容}`' AGENTS.md && ok "AGENTS.md → [codex]:" || ng "AGENTS.md → [codex]:"
+grep -q 'HOOK_AGENT="codex"' .codex/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=codex" || ng "hook-io HOOK_AGENT=codex"
+grep -q '"\$TOOL" = "apply_patch"' .codex/hooks/shell/require-test.sh && ok "[NOTE]→apply_patch" || ng "[NOTE]→apply_patch"
+grep -q 'bash .agents/skills/rebase-squash/rebase-squash.sh' .agents/skills/rebase-squash/SKILL.md && ok "[skills_root]→.agents/skills" || ng "[skills_root]→.agents/skills"
+grep -q 'AGENT_TAG="codex"' .agents/skills/rebase-squash/rebase-squash.sh && ok "rebase-squash AGENT_TAG=codex" || ng "rebase-squash AGENT_TAG=codex"
+LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
+[ "$LEFT" = "0" ] && ok "置換漏れゼロ(codex)" || { ng "置換漏れ $LEFT 件(codex)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents | grep -v '/init-agent/'; }
+OUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash .codex/hooks/shell/deny-history-rewrite.sh)
+[ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "codex: git rebase を deny" || ng "codex: rebase deny 失敗 out=[$OUT]"
+
+echo "== 5.5 skill-session marker と発火スコープ（codex） =="
+H=.codex/hooks/shell
+UP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$tdd-run src/foo.ts を回して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
+echo "$UP" | bash $H/skill-session.sh
+[ -f .codex/tmp/skill-session.tdd-run.SESS1 ] && ok "skill-session: \$tdd-run 起動で marker 記録" || ng "skill-session: marker 記録失敗"
+UP2=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS9",cwd:$cwd,prompt:"tdd-run について教えて",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
+echo "$UP2" | bash $H/skill-session.sh
+[ ! -f .codex/tmp/skill-session.tdd-run.SESS9 ] && ok "skill-session: \$ 無しの言及では発火しない" || ng "skill-session: 誤発火"
+AP=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",turn_id:"t1",transcript_path:"/tmp/x.jsonl",cwd:$cwd,hook_event_name:"PreToolUse",model:"gpt-5.5",permission_mode:"bypassPermissions",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: src/foo.ts\n+x\n*** End Patch\n"},tool_use_id:"call_x"}')
+OUT=$(echo "$AP" | bash $H/require-test.sh)
+[ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: marker 一致で執行(実機同形ペイロード)" || ng "require-test: marker 一致 out=[$OUT]"
+APMD=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: README.md\n+x\n*** End Patch"}}')
+[ -z "$(echo "$APMD" | bash $H/require-test.sh)" ] && ok "require-test: md のみのパッチは棄権" || ng "require-test: md が棄権されない"
+APMX=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: a.md\n+x\n*** Add File: src/bar.ts\n+y\n*** End Patch"}}')
+[ "$(echo "$APMX" | bash $H/require-test.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: 複数ファイルパッチの一部違反を deny" || ng "require-test: 複数ファイル検査漏れ"
+APB=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"echo hi"}}')
+[ -z "$(echo "$APB" | bash $H/require-test.sh)" ] && ok "require-test: Bash は棄権" || ng "require-test: Bash"
+AP2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS2",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: src/foo.ts\n+x\n*** End Patch"}}')
+[ -z "$(echo "$AP2" | bash $H/require-test.sh)" ] && ok "require-test: 別セッションの marker では発火しない" || ng "require-test: 残骸で発火"
+rm -f .codex/tmp/skill-session.tdd-run.SESS1
+[ -z "$(echo "$AP" | bash $H/require-test.sh)" ] && ok "require-test: marker 無しは棄権" || ng "require-test: marker 無しで発火"
+UPP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$prototype",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
+echo "$UPP" | bash $H/skill-session.sh
+PT=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: a.test.ts\n+x\n*** End Patch"}}')
+[ "$(echo "$PT" | bash $H/prototype-guard.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "prototype-guard: marker 一致でテスト作成を deny" || ng "prototype-guard: 執行されず"
+PT2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS2",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: a.test.ts\n+x\n*** End Patch"}}')
+[ -z "$(echo "$PT2" | bash $H/prototype-guard.sh)" ] && ok "prototype-guard: 別セッションは棄権" || ng "prototype-guard: 残骸で発火"
+SE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"SessionEnd",session_id:"SESS1",cwd:$cwd}')
+echo "$SE" | bash $H/skill-session.sh
+[ ! -f .codex/tmp/skill-session.prototype.SESS1 ] && ok "skill-session: SessionEnd で自セッションの marker を掃除" || ng "skill-session: 掃除漏れ"
+PG=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .git/config\n+x\n*** End Patch"}}')
+[ "$(echo "$PG" | bash $H/protect-git-dir.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-git-dir: パッチ経由の .git 書き込みを deny" || ng "protect-git-dir: apply_patch 素通し"
+PE=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .env\n+X=1\n*** End Patch"}}')
+[ "$(echo "$PE" | bash $H/protect-env.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-env: パッチ経由の .env 書き込みを deny" || ng "protect-env: apply_patch 素通し"
+PE2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: config/.env.production\n+X=1\n*** End Patch"}}')
+[ "$(echo "$PE2" | bash $H/protect-env.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-env: .env.production も deny" || ng "protect-env: variant 素通し"
+PE3=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/env.ts\n+x\n*** End Patch"}}')
+[ -z "$(echo "$PE3" | bash $H/protect-env.sh)" ] && ok "protect-env: env.ts は棄権(誤爆なし)" || ng "protect-env: env.ts 誤爆"
+
+echo "== 6. テンプレート残渣チェック =="
+command grep -rn "allowed-tools:.*Shell" "$REPO/skills" >/dev/null 2>&1 && ng "allowed-tools に Shell が残存" || ok "allowed-tools: Shell 残存なし"
+command grep -rn "hookSpecificOutput" "$REPO/hooks/shell" 2>/dev/null | grep -v hook-io.sh | grep -q . && ng "hook-io 以外にスキーマ直書き" || ok "スキーマ直書きは hook-io のみ"
+command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md" 2>/dev/null | grep -q . && { ng "[claude] 直書き残存"; command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md"; } || ok "[claude] 直書きゼロ"
+
+echo "----"
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
