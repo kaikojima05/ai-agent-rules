@@ -1,0 +1,16 @@
+# 削除・上書き系コマンドの都度確認。claude 側 settings.local.json の ask 層と同じ思想
+# （可逆でも取り返しの難しい操作は人間の確認を1回挟む）。decision は最も厳しいものが勝つ。
+# 配置先: <repo>/.codex/rules/default.rules
+prefix_rule(pattern = ["rm"], decision = "prompt")
+prefix_rule(pattern = ["rmdir"], decision = "prompt")
+prefix_rule(pattern = ["unlink"], decision = "prompt")
+prefix_rule(pattern = ["shred"], decision = "prompt")
+prefix_rule(pattern = ["mv"], decision = "prompt")
+prefix_rule(pattern = ["dd"], decision = "prompt")
+prefix_rule(pattern = ["truncate"], decision = "prompt")
+prefix_rule(pattern = ["tee"], decision = "prompt")
+prefix_rule(pattern = ["sed", "-i"], decision = "prompt")
+
+# 共有履歴への不可逆操作は claude 側の deny と同じく禁止
+prefix_rule(pattern = ["git", "push"], decision = "forbidden")
+prefix_rule(pattern = ["git", "cherry-pick"], decision = "forbidden")

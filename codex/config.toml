@@ -1,5 +1,15 @@
-sandbox_mode = "read-only"
+# 承認哲学は claude 側（settings.json + settings.local.json）と同じ:
+# 可逆（workspace 内の編集・実行）は自動、不可逆（削除・上書き・履歴改変）は確認か拒否。
+# - 可逆の自動化: sandbox_mode = workspace-write（workspace 外への書き込みと network は既定で遮断
+#   — registry 遮断の deny-registry-fetch.sh と整合）
+# - 不可逆の確認: .codex/rules/default.rules（rm / mv 等を prompt に固定）
+# - 禁止の執行: .codex/hooks.json の deny hook 群（初回に対話セッションで信頼登録が必要）
+sandbox_mode = "workspace-write"
 approval_policy = "on-request"
+# 既知の差分: claude 側は localhost への通信を自動許可するが、codex の workspace-write は
+# ネットワーク遮断が既定のため、context-* / e2e 等の localhost API 呼び出しは都度承認になる。
+# 恒常許可したい場合は公式ドキュメントで workspace-write の network 設定を確認して足すこと
+# （本テンプレートは安全側の既定 = 遮断のまま配る）
 
 [mcp_servers.chrome-devtools]
 command = "npx"
