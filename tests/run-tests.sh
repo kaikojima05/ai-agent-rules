@@ -82,12 +82,27 @@ check "protect-env: リダイレクト書き込みは deny" deny protect-env.sh 
 check "protect-env: cat .env は棄権"          empty protect-env.sh '{"tool_name":"Bash","tool_input":{"command":"cat .env"}}'
 
 # --- hook-io フェイルクローズ(未実装エージェント = claude/codex 以外) ---
-sed 's/^HOOK_AGENT="claude"/HOOK_AGENT="github"/' "$H/hook-io.sh" > "$H/hook-io.sh.codex" && mv "$H/hook-io.sh.codex" "$H/hook-io.sh.bak-claude" 2>/dev/null
-mv "$H/hook-io.sh" "$H/hook-io.sh.orig" && mv "$H/hook-io.sh.bak-claude" "$H/hook-io.sh"
-OUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash "$H/deny-history-rewrite.sh"); RC=$?
-mv "$H/hook-io.sh.orig" "$H/hook-io.sh"
-if [ -z "$OUT" ] && [ "$RC" -ne 0 ]; then PASS=$((PASS+1)); echo "ok   hook-io: 未実装エージェントは無出力+非ゼロ終了"
+# 契約: exit 1 は PreToolUse で non-blocking error 扱い = fail-open になるため、
+#       PreToolUse には deny 決定 JSON + exit 0 で止める。PreToolUse 以外のイベントは
+#       exit 0 の stdout がプロンプトへ注入されるため JSON を出さず棄権する。
+#       例外は init-agent.sh の 1 コマンドのみ（placeholder を解決する初期化自身を止めない）。
+sed 's/^HOOK_AGENT="claude"/HOOK_AGENT="github"/' "$H/hook-io.sh" > "$H/hook-io.sh.github"
+mv "$H/hook-io.sh" "$H/hook-io.sh.orig" && mv "$H/hook-io.sh.github" "$H/hook-io.sh"
+
+OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash "$H/deny-history-rewrite.sh"); RC=$?
+if [ "$RC" -eq 0 ] && [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
+  PASS=$((PASS+1)); echo "ok   hook-io: 未実装エージェントは deny JSON + exit 0"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: 未実装エージェント rc=$RC out=[$OUT]"; fi
+
+OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash ./skills/init-agent/init-agent.sh codex"}}' | bash "$H/deny-history-rewrite.sh"); RC=$?
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: 未実装でも init-agent.sh は棄権"
+else FAIL=$((FAIL+1)); echo "FAIL hook-io: init-agent 例外 rc=$RC out=[$OUT]"; fi
+
+OUT=$(echo '{"hook_event_name":"UserPromptSubmit","prompt":"git rebase して"}' | bash "$H/deny-history-rewrite.sh"); RC=$?
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: PreToolUse 以外は JSON を出さず棄権"
+else FAIL=$((FAIL+1)); echo "FAIL hook-io: 非 PreToolUse rc=$RC out=[$OUT]"; fi
+
+mv "$H/hook-io.sh.orig" "$H/hook-io.sh"
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
