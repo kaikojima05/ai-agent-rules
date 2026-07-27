@@ -2,19 +2,20 @@
 # prototype スキル稼働中の Edit|Write 判定。テストファイルのみ禁止(deny)する deny 専任 hook。
 # それ以外は棄権し、自動化は settings の allow(Edit(**)/Write(**)) が担う。
 # Why: プロトタイプ段階で雑なテストを残すと、後で残すべき正規テストか判別できなくなるため。
-# 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。
-# stderr を捨て、jq 等サブプロセスのエラー文字がツール出力へ混入する経路を断つ。
 exec 2>/dev/null
-INPUT=$(cat)
-FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
-[ -z "$FILE" ] && exit 0
+. "$(dirname "$0")/hook-io.sh"
 
-# テストファイルは prototype 中は作らせない（テストは OK 後のフェーズで書く）
-if echo "$FILE" | grep -q '\.test\.'; then
-  jq -n --arg r "prototype 中はテストファイルを作成できません。動作確認は実行で行い、テストは OK 後（tdd-run 等）で書いてください。" \
-    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":$r}}'
+# codex では skill-session marker（$prototype 起動時に skill-session.sh が記録）が
+# 現セッションを指す時だけ執行する。claude は prototype の frontmatter hooks が起動を絞る
+if [ "$HOOK_AGENT" = "codex" ] && ! hook_skill_session_active "prototype"; then
   exit 0
 fi
+# テストファイルは prototype 中は作らせない（テストは OK 後のフェーズで書く）
+while IFS= read -r FILE; do
+  [ -z "$FILE" ] && continue
+  echo "$FILE" | grep -q '\.test\.' && \
+    hook_deny "prototype 中はテストファイルを作成できません。動作確認は実行で行い、テストは OK 後（tdd-run 等）で書いてください。"
+done < <(hook_file_paths)
 
 # それ以外は棄権して settings に委ねる（hook が allow を配ると密度の定義が二重化する）
 exit 0
