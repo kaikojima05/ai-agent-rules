@@ -2,7 +2,7 @@
 # テンプレート全体の回帰テスト。hook・スキル・配布設定を変更したら必ず走らせること。
 #   bash tests/verify-all.sh
 # 検証内容: 構文 / 実行ビット / claude 配置シム / hook 全数(run-tests.sh) /
-#           rebase-squash E2E / codex 配置シム / skill-session スコープ / 残渣チェック
+#           rebase-squash E2E / codex 配布物・rules 実機検査 / skill-session スコープ / 残渣チェック
 # 作業ファイルは一時ディレクトリに作りリポジトリを汚さない（終了時に自動削除）。
 set -u
 SUITE="$(cd "$(dirname "$0")" && pwd)"
@@ -78,8 +78,14 @@ grep -q "COMMITS 1" b2.out && ok "非タグコミットを境界として認識"
 echo "== 5. codex 配置シミュレーション（skills は .agents/skills） =="
 mkdir -p "$S/codex-sim/.codex" "$S/codex-sim/.agents"
 cp "$REPO/AGENTS.md" "$S/codex-sim/"
+cp "$REPO/codex/config.toml" "$S/codex-sim/.codex/"
+cp "$REPO/codex/hooks.json" "$S/codex-sim/.codex/"
+cp "$REPO/codex/.gitignore" "$S/codex-sim/.codex/"
 cp -R "$REPO/hooks" "$S/codex-sim/.codex/hooks"
 cp -R "$REPO/rules" "$S/codex-sim/.codex/rules"
+cp "$REPO/codex/rules/default.rules" "$S/codex-sim/.codex/rules/"
+cp -R "$REPO/prompt" "$S/codex-sim/.codex/prompt"
+cp -R "$REPO/e2e" "$S/codex-sim/.codex/e2e"
 cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
 cd "$S/codex-sim"
 if bash .agents/skills/init-agent/init-agent.sh codex > init-codex.log 2>&1; then ok "init-agent codex 実行"; else ng "init-agent codex 実行"; cat init-codex.log; fi
@@ -90,8 +96,46 @@ grep -q 'bash .agents/skills/rebase-squash/rebase-squash.sh' .agents/skills/reba
 grep -q 'AGENT_TAG="codex"' .agents/skills/rebase-squash/rebase-squash.sh && ok "rebase-squash AGENT_TAG=codex" || ng "rebase-squash AGENT_TAG=codex"
 LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
 [ "$LEFT" = "0" ] && ok "置換漏れゼロ(codex)" || { ng "置換漏れ $LEFT 件(codex)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents | grep -v '/init-agent/'; }
+grep -q '^hooks = true$' .codex/config.toml && ok "config: hooks を明示有効化" || ng "config: hooks が未設定"
+grep -q '^network_access = false$' .codex/config.toml && ok "config: shell network を明示遮断" || ng "config: network 境界が未設定"
+[ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
+jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
+jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-agent-config.sh"))] | length' .codex/hooks.json)" = "2" ] && ok "設定保護hookを apply_patch/Bash に配線" || ng "設定保護hookの配線漏れ"
+if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("guard-overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
+  ok "未対応 ask hook を codex へ未配線"
+else
+  ng "未対応 ask hook が codex に配線されている"
+fi
+MISSING_HOOKS=0
+for SCRIPT in $(jq -r '.hooks[][] | .hooks[].command' .codex/hooks.json | sed -nE 's|.*\.codex/hooks/shell/([^"/]+).*|\1|p' | sort -u); do
+  [ -x ".codex/hooks/shell/$SCRIPT" ] || { ng "hook 参照先が存在しない: $SCRIPT"; MISSING_HOOKS=1; }
+done
+[ "$MISSING_HOOKS" = "0" ] && ok "hook 参照先が全件実行可能"
 OUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash .codex/hooks/shell/deny-history-rewrite.sh)
 [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "codex: git rebase を deny" || ng "codex: rebase deny 失敗 out=[$OUT]"
+
+echo "== 5.25 codex config / rules 実機検査 =="
+if command -v codex >/dev/null 2>&1; then
+  mkdir -p "$S/codex-home"
+  printf '[projects."%s"]\ntrust_level = "trusted"\n' "$PWD" > "$S/codex-home/config.toml"
+  if printf '' | CODEX_HOME="$S/codex-home" codex -C "$PWD" app-server --strict-config --listen stdio:// > codex-config.out 2>&1; then
+    ok "codex --strict-config で配布設定を読込"
+  else
+    ng "codex --strict-config で配布設定を読めない"
+    cat codex-config.out
+  fi
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- rm -rf tmp/example 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: rm を prompt" || ng "rules: rm 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git push origin main 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "forbidden" ] && ok "rules: git push を forbidden" || ng "rules: push 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git status --short 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: git status は未制限" || ng "rules: git status 誤検出 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- zsh -lc 'echo x > output.txt' 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: opaque shell を prompt" || ng "rules: opaque shell 判定失敗 out=[$OUT]"
+else
+  echo "skip codex CLI が無いため config / rules 実機検査を省略"
+fi
 
 echo "== 5.5 skill-session marker と発火スコープ（codex） =="
 H=.codex/hooks/shell
@@ -131,6 +175,13 @@ PE2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patc
 [ "$(echo "$PE2" | bash $H/protect-env.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-env: .env.production も deny" || ng "protect-env: variant 素通し"
 PE3=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/env.ts\n+x\n*** End Patch"}}')
 [ -z "$(echo "$PE3" | bash $H/protect-env.sh)" ] && ok "protect-env: env.ts は棄権(誤爆なし)" || ng "protect-env: env.ts 誤爆"
+PAC=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .codex/config.toml\n+x\n*** End Patch"}}')
+[ "$(echo "$PAC" | bash $H/protect-agent-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-agent-config: .codex patch を deny" || ng "protect-agent-config: .codex patch 素通し"
+PAC2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .agents/skills/e2e/SKILL.md\n+x\n*** End Patch"}}')
+[ "$(echo "$PAC2" | bash $H/protect-agent-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-agent-config: .agents patch を deny" || ng "protect-agent-config: .agents patch 素通し"
+echo x > codex-untracked.txt
+GO=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Write",tool_input:{file_path:($cwd + "/codex-untracked.txt")}}')
+[ "$(echo "$GO" | bash $H/guard-overwrite.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "hook-io: codex の未対応 ask は deny" || ng "hook-io: codex ask が fail-open"
 
 echo "== 6. テンプレート残渣チェック =="
 command grep -rn "allowed-tools:.*Shell" "$REPO/skills" >/dev/null 2>&1 && ng "allowed-tools に Shell が残存" || ok "allowed-tools: Shell 残存なし"

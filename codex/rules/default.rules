@@ -1,16 +1,74 @@
-# 削除・上書き系コマンドの都度確認。claude 側 settings.local.json の ask 層と同じ思想
-# （可逆でも取り返しの難しい操作は人間の確認を1回挟む）。decision は最も厳しいものが勝つ。
-# 配置先: <repo>/.codex/rules/default.rules
-prefix_rule(pattern = ["rm"], decision = "prompt")
-prefix_rule(pattern = ["rmdir"], decision = "prompt")
-prefix_rule(pattern = ["unlink"], decision = "prompt")
-prefix_rule(pattern = ["shred"], decision = "prompt")
-prefix_rule(pattern = ["mv"], decision = "prompt")
-prefix_rule(pattern = ["dd"], decision = "prompt")
-prefix_rule(pattern = ["truncate"], decision = "prompt")
-prefix_rule(pattern = ["tee"], decision = "prompt")
-prefix_rule(pattern = ["sed", "-i"], decision = "prompt")
+# <repo>/.codex/rules/default.rules として配置する。
+# 可逆でも未コミット内容を失う操作は都度確認し、共有履歴を変える操作は拒否する。
+prefix_rule(
+    pattern = ["rm"],
+    decision = "prompt",
+    justification = "削除対象と復元方法を確認してから実行します。",
+)
+prefix_rule(
+    pattern = ["rmdir"],
+    decision = "prompt",
+    justification = "ディレクトリ削除前に対象を確認します。",
+)
+prefix_rule(
+    pattern = ["unlink"],
+    decision = "prompt",
+    justification = "ファイルまたはリンクの削除前に対象を確認します。",
+)
+prefix_rule(
+    pattern = ["shred"],
+    decision = "prompt",
+    justification = "復元困難な削除前に対象を確認します。",
+)
+prefix_rule(
+    pattern = ["mv"],
+    decision = "prompt",
+    justification = "移動による上書きや参照切れがないことを確認します。",
+)
+prefix_rule(
+    pattern = ["dd"],
+    decision = "prompt",
+    justification = "低水準の上書き対象を確認します。",
+)
+prefix_rule(
+    pattern = ["truncate"],
+    decision = "prompt",
+    justification = "ファイル内容を失う操作なので対象を確認します。",
+)
+prefix_rule(
+    pattern = ["tee"],
+    decision = "prompt",
+    justification = "出力先ファイルの上書き可否を確認します。",
+)
+prefix_rule(
+    pattern = ["sed", "-i"],
+    decision = "prompt",
+    justification = "in-place編集の対象を確認します。",
+)
+
+# redirection・変数展開・wildcard・control flow を含むscriptはCodexが個別コマンドへ
+# 安全に分解できないため、shell wrapper全体を確認対象にする。
+prefix_rule(
+    pattern = [["bash", "zsh", "sh"], ["-lc", "-c"]],
+    decision = "prompt",
+    justification = "静的に分解できないshell scriptの副作用を確認します。",
+)
+
+# 未コミット内容やindexを失わせる可能性があるGit操作。
+prefix_rule(
+    pattern = ["git", ["reset", "clean", "restore", "checkout", "switch"]],
+    decision = "prompt",
+    justification = "作業ツリーまたはindexへの影響を確認します。",
+)
 
 # 共有履歴への不可逆操作は claude 側の deny と同じく禁止
-prefix_rule(pattern = ["git", "push"], decision = "forbidden")
-prefix_rule(pattern = ["git", "cherry-pick"], decision = "forbidden")
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "pushはユーザー自身が変更内容を確認して実行してください。",
+)
+prefix_rule(
+    pattern = ["git", "cherry-pick"],
+    decision = "forbidden",
+    justification = "履歴の取り込みはユーザー自身が実行してください。",
+)

@@ -79,9 +79,18 @@ hook_deny() {
   exit 0
 }
 
-# 決定 JSON(ask)を stdout へ出し、人間の確認を 1 回挟ませて hook を終える関数
+# 人間の確認を要求する関数。Claude は ask 決定を返せるが、Codex の PreToolUse は
+# permissionDecision=ask を未サポートで、hook failure としてツール実行を継続してしまう。
+# Codex の確認操作は .codex/rules へ定義し、誤配線時は deny に倒して fail-open を防ぐ。
 hook_ask() {
-  jq -n --arg r "$1" \
-    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":$r}}'
-  exit 0
+  case "$HOOK_AGENT" in
+    claude)
+      jq -n --arg r "$1" \
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":$r}}'
+      exit 0
+      ;;
+    codex)
+      hook_deny "Codex の PreToolUse hook は ask をサポートしません。default.rules に承認ルールを定義してください。元の理由: $1"
+      ;;
+  esac
 }

@@ -1,15 +1,19 @@
-# 承認哲学は claude 側（settings.json + settings.local.json）と同じ:
-# 可逆（workspace 内の編集・実行）は自動、不可逆（削除・上書き・履歴改変）は確認か拒否。
-# - 可逆の自動化: sandbox_mode = workspace-write（workspace 外への書き込みと network は既定で遮断
-#   — registry 遮断の deny-registry-fetch.sh と整合）
-# - 不可逆の確認: .codex/rules/default.rules（rm / mv 等を prompt に固定）
-# - 禁止の執行: .codex/hooks.json の deny hook 群（初回に対話セッションで信頼登録が必要）
+# プロジェクト配布用設定。<repo>/.codex/config.toml として配置する。
+# trusted project でのみ読み込まれ、CLI / profile / user config より優先度は低い。
+# 可逆な workspace 内操作は自動化し、不可逆操作は rules の確認か hooks の拒否へ分離する。
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
-# 既知の差分: claude 側は localhost への通信を自動許可するが、codex の workspace-write は
-# ネットワーク遮断が既定のため、context-* / e2e 等の localhost API 呼び出しは都度承認になる。
-# 恒常許可したい場合は公式ドキュメントで workspace-write の network 設定を確認して足すこと
-# （本テンプレートは安全側の既定 = 遮断のまま配る）
+
+[sandbox_workspace_write]
+# shell の outbound network は localhost を含めて遮断し、AGENTS.md の HTTP Request 規約どおり
+# 必要なリクエストだけ sandbox 外の承認へ送る。
+network_access = false
+# workspace-write は writable root 内でも .git / .codex / .agents を再帰的に read-only にする。
+# init-agent のような設定変更は、ユーザーが内容を確認して sandbox 外で明示実行する。
+
+[features]
+# 現行 Codex では既定で有効だが、配布設定が hooks.json を前提とすることを明示する。
+hooks = true
 
 [mcp_servers.chrome-devtools]
 command = "npx"
