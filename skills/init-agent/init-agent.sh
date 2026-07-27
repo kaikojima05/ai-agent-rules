@@ -48,6 +48,8 @@ done < <(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS | grep -v '/init-ag
 
 # 2) [NOTE] 解決: [NOTE] 行から直後の bare if 行までを確定条件へ畳む（init-agent 自身は除外）
 while IFS= read -r f; do
+  WAS_EXECUTABLE=false
+  [ -x "$f" ] && WAS_EXECUTABLE=true
   if ! awk -v cond="$COND" '
     /\[NOTE\]: init-agent/ { skip=1; next }
     skip && /^[[:space:]]*if[[:space:]]*$/ { print cond; skip=0; next }
@@ -64,6 +66,12 @@ while IFS= read -r f; do
     # マーカーが残ったまま成功に見えるため、失敗として報告する
     rm -f "$f.tmp"
     echo "ERROR: bare if not found, cannot resolve [NOTE]: $f" >&2
+    FAILED=1
+    continue
+  fi
+  if [ "$WAS_EXECUTABLE" = true ] && ! chmod +x "$f.tmp"; then
+    rm -f "$f.tmp"
+    echo "ERROR: cannot preserve executable bit: $f" >&2
     FAILED=1
     continue
   fi
