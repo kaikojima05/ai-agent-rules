@@ -51,6 +51,9 @@ bash [skills_root]/init-agent/init-agent.sh <agent>
 - Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る（permission は `settings.local.json` の事前 allow が担保するため承認プロンプトは出ない）
   - Why: 対象ツリー（`.claude/` 等）は sandbox の denyWrite で保護されており、sandbox 内での実行は必ず「Operation not permitted」で失敗する。失敗→sandbox 外で再実行という二度手間を踏まないための除外設定である
   - それでも「Operation not permitted」で失敗した場合は `excludedCommands` 未設定の古い配置なので、sandbox を無効化して再実行し、`settings.json` の更新をユーザーに案内すること
+- Codex では `workspace-write` が `.codex` / `.agents` を read-only にするため、配布済みの `.codex/rules/default.rules` が上記の正確なコマンドだけを sandbox 外で allow する
+  - project が trusted でないと project-local rules 自体が読み込まれない。未信頼または rules 未配置で失敗した場合は迂回せず、project の信頼と配布ファイルを確認する
+  - 引数やスクリプトパスを変えると限定 allow に一致しない。`bash .agents/skills/init-agent/init-agent.sh codex` の形を維持する
 
 Why: 置換は完全に決定的な処理であり、その都度インタプリタでコードを書き捨てると承認の乱発とツール間の差分の温床になる。レビュー済みの1スクリプトへ固定すれば、一度許可すれば以降は承認なしで再実行できる。
 

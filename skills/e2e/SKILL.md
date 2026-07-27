@@ -147,7 +147,16 @@ chrome-devtools-mcp を通じてブラウザを操作し、実装した機能が
 
 ユーザーが承認したら Step 5 へ進む。修正が必要な場合は計画を更新する。
 
-承認した内容は .[agent_name]/e2e/.e2e.md に書き込む
+承認した内容はセッションの一時領域（scratchpad / `$TMPDIR`）へドラフトとして書き、
+固定宛先の専用スクリプトで .[agent_name]/e2e/.e2e.md に反映する。
+
+```
+bash [skills_root]/e2e/apply-e2e-plan.sh <ドラフトのパス>
+```
+
+- `.e2e.md` は設定ディレクトリの保護対象なので、ファイル編集ツールで直接書き込まない
+- Claude Code は sandbox の除外設定、codex は `.codex/rules/default.rules` の限定 allow により、このスクリプトだけを sandbox 外で実行する
+- `save` 指定時は反映完了後に終了し、通常実行時は反映完了後に Step 5 へ進む
 
 ---
 

@@ -96,6 +96,13 @@ grep -q 'bash .agents/skills/rebase-squash/rebase-squash.sh' .agents/skills/reba
 grep -q 'AGENT_TAG="codex"' .agents/skills/rebase-squash/rebase-squash.sh && ok "rebase-squash AGENT_TAG=codex" || ng "rebase-squash AGENT_TAG=codex"
 LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
 [ "$LEFT" = "0" ] && ok "置換漏れゼロ(codex)" || { ng "置換漏れ $LEFT 件(codex)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents | grep -v '/init-agent/'; }
+printf 'codex e2e plan\n' > "$S/e2e-plan.md"
+if bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" > apply-e2e.out 2>&1 && grep -q '^codex e2e plan$' .codex/e2e/.e2e.md; then
+  ok "e2e plan を固定宛先へ反映"
+else
+  ng "e2e plan の固定宛先反映に失敗"
+  cat apply-e2e.out
+fi
 grep -q '^hooks = true$' .codex/config.toml && ok "config: hooks を明示有効化" || ng "config: hooks が未設定"
 grep -q '^network_access = false$' .codex/config.toml && ok "config: shell network を明示遮断" || ng "config: network 境界が未設定"
 [ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
@@ -133,6 +140,10 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: git status は未制限" || ng "rules: git status 誤検出 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- zsh -lc 'echo x > output.txt' 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: opaque shell を prompt" || ng "rules: opaque shell 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/init-agent/init-agent.sh codex 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: init-agent の固定経路を allow" || ng "rules: init-agent 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: e2e plan の固定経路を allow" || ng "rules: e2e plan 判定失敗 out=[$OUT]"
 else
   echo "skip codex CLI が無いため config / rules 実機検査を省略"
 fi

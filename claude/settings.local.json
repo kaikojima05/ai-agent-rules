@@ -4,6 +4,7 @@
       "Bash(yarn:*)",
       "Bash(bash .claude/skills/init-agent/init-agent.sh:*)",
       "Bash(bash .claude/skills/compose-prompt/apply-prompt.sh:*)",
+      "Bash(bash .claude/skills/e2e/apply-e2e-plan.sh:*)",
       "mcp__serena__check_onboarding_performed",
       "mcp__serena__onboarding",
       "mcp__serena__list_dir",

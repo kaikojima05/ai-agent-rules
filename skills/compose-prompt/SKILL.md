@@ -42,6 +42,7 @@ bash [skills_root]/compose-prompt/apply-prompt.sh <ドラフトのパス>
 
 - Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る（sandbox 内では denyWrite の `.[agent_name]` に阻まれて必ず失敗する）
 - それでも「Operation not permitted」で失敗した場合は `excludedCommands` 未設定の古い配置なので、sandbox を無効化して再実行し、`settings.json` の更新をユーザーに案内すること
+- Codex では `workspace-write` が `.codex` を保護し、`.codex/rules/default.rules` が `bash .agents/skills/compose-prompt/apply-prompt.sh <ドラフト>` だけを sandbox 外で allow する。失敗時は迂回せず、project の信頼と rules 配置を確認すること
 
 ## .prompt.md の基本構成
 
