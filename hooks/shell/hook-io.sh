@@ -13,20 +13,49 @@
 
 HOOK_AGENT="[agent_name]"
 
+# 入力は種別 / jq の判定より前に読み切る。下の hook_io_fatal がイベント種別を見るため。
+HOOK_INPUT=$(cat)
+
+# 設定不備で hook が機能しないときの終了口。
+# exit 1 は PreToolUse では "non-blocking error" 扱いとなりツールはそのまま実行される。
+# つまり「安全側に倒したつもりの非ゼロ終了」が実際には全ガードの fail-open になる。
+# よって PreToolUse では deny 決定 JSON を直接書き出して確実に止める。
+# jq 不在時も出せるよう printf で組む（理由文は自前のリテラルのみでエスケープ不要）。
+# 各 hook は冒頭で stderr を捨てるため、原因はこの理由文でしかエージェントに届かない。
+# PreToolUse 以外（skill-session.sh の UserPromptSubmit / SessionEnd）で同じ JSON を
+# 出すと、exit 0 の stdout がプロンプトへの追加コンテキストとして注入されるので棄権する。
+# 棄権しても、marker 生成の失敗で緩む require-test.sh 自身が PreToolUse 側で deny
+# されるため fail-open にはならない。
+hook_io_fatal() {
+  case "$HOOK_INPUT" in
+    *'"hook_event_name"'*'"PreToolUse"'*)
+      printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$1"
+      ;;
+  esac
+  exit 0
+}
+
 # 未実装エージェントの即死: スキーマ不明のまま進むと jq が空を返し「全ファイル素通し」
-# という最悪の静かな故障になるため、判定せず非ゼロで終了する。
+# という最悪の静かな故障になるため、判定せず deny に倒す。
 # codex: main ソース + 実機 probe（v0.145.0、2026-07-27）で入出力とも Claude 互換を
 #   確定済み。Bash 系は {"command": <文字列>}、apply_patch は {"command": <パッチ全文>}
 #   で file_path 無し → hook_file_paths がパッチを解析する
 case "$HOOK_AGENT" in
   claude|codex) ;;
-  *) exit 1 ;;
+  *)
+    # placeholder 未解決 = 未初期化。ここで一律 deny すると placeholder を解決する
+    # init-agent 自身の起動まで止まって詰むため、その 1 コマンドだけ通す
+    case "$HOOK_INPUT" in
+      *init-agent.sh*) exit 0 ;;
+    esac
+    hook_io_fatal "エージェント種別が未確定です（hook-io.sh の HOOK_AGENT が placeholder のまま）。init-agent スキルを実行して配置を初期化してください。"
+    ;;
 esac
 
-# jq 不在は全 hook の静かな無効化（空抽出 → 全件素通し）になるため、判定せず非ゼロで終了する
-command -v jq >/dev/null 2>&1 || exit 1
-
-HOOK_INPUT=$(cat)
+# jq 不在は全 hook の静かな無効化（空抽出 → 全件素通し）になるため、判定せず deny に倒す。
+# 「jq が無い」の報告自体に jq を使えないので hook_io_fatal（printf 実装）を使う
+command -v jq >/dev/null 2>&1 || \
+  hook_io_fatal "jq が見つからないため hook が機能しません。全ガードが無効な状態での実行は許可できません。ユーザー自身のシェルで jq を導入してください（macOS: brew install jq）。"
 
 # 呼び出し元ツールの名前を返す関数
 hook_tool_name() { echo "$HOOK_INPUT" | jq -r '.tool_name'; }
