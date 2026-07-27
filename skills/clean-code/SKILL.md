@@ -1,7 +1,7 @@
 ---
 name: clean-code
-description: 実装完了後にフォーマッタおよびリンターを実行し、コード品質とスタイルを修正する。 
-allowed-tools: Read, Grep, Glob, Shell
+description: 実装完了後にフォーマッタおよびリンターを実行し、コード品質とスタイルを修正する。
+allowed-tools: Read, Grep, Glob, Bash
 disable-model-invocation: true
 ---
 
@@ -44,6 +44,4 @@ disable-model-invocation: true
   - 設定ファイルが存在するディレクトリにて `node_modules/.bin/prisma format` を実行する。
 
 ## 注意事項
-- 実行前に必ず設定ファイルの有無を確認し、プロジェクトに最適なツールを選択すること。
-- エラーが発生した場合は、メッセージを確認し、必要に応じて手動修正またはタスクの再試行を検討すること。
 - コード整形と静的解析の対象は、`git status` で確認できる未ステージング・ステージング済みのファイルに限定すること。

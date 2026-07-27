@@ -1,7 +1,7 @@
 ---
 name: context-update
 description: context-dictionary API に登録済みの知見を更新・follow-up を管理する。
-allowed-tools: Shell
+allowed-tools: Bash
 disable-model-invocation: true
 ---
 
@@ -135,32 +135,12 @@ ID が明示されている場合は `GET /api/insights/:id` で現在の状態�
 ### curl の実行例
 
 ```bash
-# 知見の内容を更新
+# 知見の内容を更新（addTags は既存タグを保持したまま追加）
 curl -s -X PATCH http://localhost:3210/api/insights/3 \
   -H 'Content-Type: application/json' \
   -d '{
-    "detail": "更新後の詳細説明"
-  }'
-
-# タグを追加（既存を保持）
-curl -s -X PATCH http://localhost:3210/api/insights/3 \
-  -H 'Content-Type: application/json' \
-  -d '{
+    "detail": "更新後の詳細説明",
     "addTags": ["refactoring"]
-  }'
-
-# タグを削除
-curl -s -X PATCH http://localhost:3210/api/insights/3 \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "removeTags": ["discount"]
-  }'
-
-# タグを全置換
-curl -s -X PATCH http://localhost:3210/api/insights/3 \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "tags": ["billing", "discount", "refactoring"]
   }'
 
 # follow-up を追加

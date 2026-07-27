@@ -1,7 +1,7 @@
 ---
 name: run-agent
 description: "@.[agent_name]/prompt/.prompt.md の内容を実行する"
-allowed-tools: Shell
+allowed-tools: Bash
 disable-model-invocation: true
 ---
 

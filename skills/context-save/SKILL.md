@@ -1,7 +1,7 @@
 ---
 name: context-save
 description: セッションで得た知見を context-dictionary API に登録する。
-allowed-tools: Shell
+allowed-tools: Bash
 disable-model-invocation: true
 ---
 
@@ -86,7 +86,7 @@ curl -s -X POST http://localhost:3210/api/insights \
   -d '{
     "type": "discovery",
     "content": "Stripe API は webhook の再送を最大3日間行う",
-    "agent": "copilot-cli",
+    "agent": "[agent_name]",
     "repo": "billing-service",
     "branch": "feat/stripe-webhook",
     "tags": ["stripe", "webhook"]
@@ -96,8 +96,8 @@ curl -s -X POST http://localhost:3210/api/insights \
 curl -s -X POST http://localhost:3210/api/insights/bulk \
   -H 'Content-Type: application/json' \
   -d '[
-    {"type": "solution", "content": "...", "agent": "copilot-cli", "tags": ["perf"]},
-    {"type": "issue", "content": "...", "agent": "copilot-cli", "tags": ["tech-debt"]}
+    {"type": "solution", "content": "...", "agent": "[agent_name]", "tags": ["perf"]},
+    {"type": "issue", "content": "...", "agent": "[agent_name]", "tags": ["tech-debt"]}
   ]'
 ```
 

@@ -1,7 +1,7 @@
 ---
 name: e2e
 description: chrome-devtools-mcp を使用して実装内容を E2E テストする。テスト開始前にユーザーへ必要情報を確認し、ブラウザ操作で検証する。
-allowed-tools: Read, Grep, Glob, Shell, mcp__chrome-devtools__*
+allowed-tools: Read, Grep, Glob, Bash, mcp__chrome-devtools__*
 disable-model-invocation: true
 ---
 
@@ -14,7 +14,7 @@ chrome-devtools-mcp を通じてブラウザを操作し、実装した機能が
 
 ### Step 1: スキルを呼び出す
 
-スキルは引数付きで呼び出せる※ただし、引数として渡せるのは のみ:
+スキルは引数付きで呼び出せる（渡せる引数は `save` / `run` のみ）:
 
 ```
 /e2e
@@ -69,7 +69,7 @@ chrome-devtools-mcp を通じてブラウザを操作し、実装した機能が
 不要であれば `不要` と入力してください。
 ```
 
-- 未入力の場合は Step 2 でエージェントが自律的に前提条件を推測する
+- 未入力の場合は Step 3 でエージェントが自律的に前提条件を推測する
 
 ---
 
@@ -81,7 +81,7 @@ chrome-devtools-mcp を通じてブラウザを操作し、実装した機能が
 不要であれば AI が自律的に判断します。
 ```
 
-- 未入力の場合は Step 2 でエージェントが自律的に完了条件を推測する
+- 未入力の場合は Step 3 でエージェントが自律的に完了条件を推測する
 
 ---
 
@@ -145,7 +145,7 @@ chrome-devtools-mcp を通じてブラウザを操作し、実装した機能が
 上記の計画でテストを開始してよいですか？
 ```
 
-ユーザーが承認したら Step 4 へ進む。修正が必要な場合は計画を更新する。
+ユーザーが承認したら Step 5 へ進む。修正が必要な場合は計画を更新する。
 
 承認した内容は .[agent_name]/e2e/.e2e.md に書き込む
 
@@ -153,7 +153,7 @@ chrome-devtools-mcp を通じてブラウザを操作し、実装した機能が
 
 ### Step 5: E2E テストの実行
 
-chrome-devtools-mcp を使用して、Step 3 で確定したシナリオを順番に実行する。
+chrome-devtools-mcp を使用して、Step 4 で承認されたシナリオを順番に実行する。
 
 #### ログインが必要な場合
 

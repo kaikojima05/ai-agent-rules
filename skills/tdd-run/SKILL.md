@@ -1,14 +1,14 @@
 ---
 name: tdd-run
 description: TDD サイクルを 1 テスト粒度で自動連続実行する。人間が止まるのは「シナリオ一括承認」「リファクタ一括提案」の 2 ゲートだけ。承認されたシナリオ全件を、間に確認を挟まず連続で実装する（一括確認 → 一括実装）。
-allowed-tools: Read, Edit, Write, Grep, Glob, Shell, AskUserQuestion
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion
 disable-model-invocation: true
 hooks:
   PreToolUse:
     - matcher: "Edit|Write"
       hooks:
         - type: command
-          command: .claude/hooks/shell/require-test.sh
+          command: .[agent_name]/hooks/shell/require-test.sh
 ---
 
 ## 目的
@@ -23,10 +23,10 @@ hooks:
 
 | ゲート | タイミング | 手段 |
 |---|---|---|
-| **GATE 1: シナリオ一括承認** | ループ開始前に 1 回 | `AskUserQuestion`（承認 / 調整） |
-| **GATE 2: リファクタ一括提案** | 全シナリオ Green 後に 1 回 | `AskUserQuestion`（適用するものを選択） |
+| **GATE 1: シナリオ一括承認** | ループ開始前に 1 回 | ユーザーへの確認（承認 / 調整） |
+| **GATE 2: リファクタ一括提案** | 全シナリオ Green 後に 1 回 | ユーザーへの確認（適用するものを選択） |
 
-この 2 つ**以外**では `AskUserQuestion` を呼ばない。テスト本体実装・Red 確認・最小実装・Green 確認・
+この 2 つ**以外**ではユーザーに確認を求めない（Claude Code では確認に `AskUserQuestion` ツールを使う）。テスト本体実装・Red 確認・最小実装・Green 確認・
 **次テストへの移行**・リファクタ適用は**報告（log）だけして自動で次に進む**。人間を待たせない。
 一括確認 → 一括実装。承認済みシナリオを 1 件ずつ確認に戻さない。
 
@@ -53,7 +53,7 @@ hooks:
 ### GATE 1: シナリオ提案（停止）
 
 公開関数 / コンポーネントごとに境界値・異常系（エラー出力・フォールバック）・副作用のシナリオ候補を
-`it.todo`（日本語タイトル）で列挙し、`AskUserQuestion` で承認・調整を求める。
+`it.todo`（日本語タイトル）で列挙し、ユーザーに承認・調整を求める。
 **正常系のシナリオは提案しない**（`tdd-pattern.md` 準拠）。
 
 - describe のネストは 2 階層まで
@@ -96,7 +96,7 @@ Green を確認したら**次の `it.todo` で a に戻る**。残りが無く�
 #### GATE 2: リファクタ一括提案（全件 Green 後に停止）
 
 全シナリオが Green になったら、`function-pattern.md` / `ui-pattern.md` を毎回 Glob で拾い直して再読し、
-今回のループで書いた**全ファイルの違反箇所をまとめて**案として `AskUserQuestion` で提示する。
+今回のループで書いた**全ファイルの違反箇所をまとめて**案として提示し、適用するものをユーザーに選ばせる。
 
 - 選ばれたものだけ Edit する。1 Edit = 1 観点
 - **適用のたびにテスト再実行**し Green 維持を確認（これは自動）。崩したら即停止・revert 提案
@@ -112,12 +112,12 @@ commit 準備を促す。実装中に気づいた**新規シナリオ候補**が
 
 ## 注意事項（「自動で走る」の境界線）
 
-- **2 ゲート以外で `AskUserQuestion` を呼ばない。** 自動区間で確認を挟むと統合した意味が消える
+- **2 ゲート以外でユーザーに確認を求めない。** 自動区間で確認を挟むと統合した意味が消える
 - ただし以下の **事故は GATE と無関係に例外停止**する。2 ゲート哲学は「正常系では 2 つだけ」の意味であって「何があっても止まるな」ではない
   - Red の syntax / import error が自己修正でも解消しない（テストの構造バグ）
   - 他テストの破壊
   - `require-test.sh` 等の hook による deny
 - **Red のエラー要約と Green の結果は、停止しなくても必ず log に残す。** 「読まなくていい」と「追えなくする」は違う。後から遡れるようにする
-- 役割分担: **テスト強制（deny）は本スキルの frontmatter hooks、書き込み自動化（allow）は settings** が担う。`require-test.sh` は**本スキル稼働中のみ**走り、対応テストの無い ts/js コード本体を deny する（それ以外は棄権し、`settings.local.json` の allow `Edit(**)`/`Write(**)` が通す）。hook は allow を返さない — allow は settings に一元化し、密度の定義を二重化させない（なお ask/deny ルールは hook の決定より常に優先される）。したがって **ask 層のパス（migrations/ package.json 等）は tdd-run 中でも手が止まる**。これは仕様であって事故ではない。**平時（ノースキル）は Edit/Write に hook が無く、settings の permission に委ねる**（テスト存在を門前払いの条件にしない）
+- 役割分担（Claude Code の配線。codex では hooks.json の常時配線 + skill-session marker が同じスコープを再現する）: **テスト強制（deny）は本スキルの frontmatter hooks、書き込み自動化（allow）は settings** が担う。`require-test.sh` は**本スキル稼働中のみ**走り、対応テストの無い ts/js コード本体を deny する（それ以外は棄権し、`settings.local.json` の allow `Edit(**)`/`Write(**)` が通す）。hook は allow を返さない — allow は settings に一元化し、密度の定義を二重化させない（なお ask/deny ルールは hook の決定より常に優先される）。したがって **ask 層のパス（migrations/ package.json 等）は tdd-run 中でも手が止まる**。これは仕様であって事故ではない。**平時（ノースキル）は Edit/Write に hook が無く、settings の permission に委ねる**（テスト存在を門前払いの条件にしない）
 - テスト実行はプロジェクトの test script 経由（例: `yarn test <path>`）で行う。`npx vitest` / `npx jest` の直起動は禁止（registry を叩き、`.env.test` 等の env を飛ばして global-setup が落ちる。`tdd-pattern.md` 参照）。この test script は settings の allow が前提（未設定だと自動区間でも permission prompt が出て止まる）
 - 本スキルは `tdd-pattern.md` の従属物。規約が変わったら本スキルより規約が優先

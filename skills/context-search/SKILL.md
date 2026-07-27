@@ -1,7 +1,7 @@
 ---
 name: context-search
 description: context-dictionary API から過去の知見を検索・取得し、現在の作業に活用する。
-allowed-tools: Shell
+allowed-tools: Bash
 disable-model-invocation: true
 ---
 

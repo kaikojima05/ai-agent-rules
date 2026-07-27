@@ -1,14 +1,14 @@
 ---
 name: prototype
-description: 上司/自分の OK が出るまでの「使い捨て前提」のプロトタイプを最速で作る。テストは書かず（禁止）、可逆領域は承認なしでぶん回す。denyWrite 登録パスは sandbox で物理的に死守する。
-allowed-tools: Read, Edit, Write, Grep, Glob, Shell, AskUserQuestion
+description: 上司/自分の OK が出るまでの「使い捨て前提」のプロトタイプを最速で作る。テストは書かず（禁止）、可逆領域は承認なしでぶん回す。保護パスは sandbox と hook で物理的に死守する。
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion
 disable-model-invocation: true
 hooks:
   PreToolUse:
     - matcher: "Edit|Write"
       hooks:
         - type: command
-          command: .claude/hooks/shell/prototype-guard.sh
+          command: .[agent_name]/hooks/shell/prototype-guard.sh
 ---
 
 ## 目的
@@ -17,8 +17,8 @@ hooks:
 承認なしで連続実装し、OK が出たら別フェーズ（tdd-run 等）でテストと本実装に移す。
 
 設計思想: **不可逆なものだけ守り、可逆なものは全部手放す。**
-- 可逆（コード編集・新規作成・検索・ビルド）→ 承認なしで自由（settings の allow と sandbox の autoAllow が担う）
-- 削除・移動（rm / mv 等）→ 可逆でも ask ルールで都度確認（ask ルールは hook の allow に勝つ仕様のため、スキル側で自動化はできないし、しない）
+- 可逆（コード編集・新規作成・検索・ビルド）→ 承認なしで自由（担当はエージェント別: 「## 承認の境界」の表）
+- 削除・移動（rm / mv 等）→ 可逆でも都度確認（claude: settings の ask / codex: `.codex/rules` の prompt。この確認はスキル側で自動化できないし、しない）
 - 不可逆（denyWrite 登録パスの改変・削除、プロジェクト外への波及）→ sandbox が物理的にブロック
 
 テスト禁止 hook は **起動したセッションの間ずっと効く**。抜けるにはセッションを終了する
@@ -42,17 +42,20 @@ hooks:
 
 ## Step 0: 前提条件の確認（必須・満たさなければ中止）
 
-本スキルは sandbox の autoAllow を前提に Bash を承認なしで回すため、**sandbox による物理防御が必須**。
-起動直後に、有効な settings（CLI > local > project > user の合成結果）に対し以下を確認する:
+本スキルは承認なしで実装を回すため、**エージェントの sandbox による物理防御が必須**。
+起動直後に、動作中のエージェントに応じて以下を確認する:
 
-1. `sandbox.enabled` が `true`
-2. `sandbox.filesystem.denyWrite` に保護対象が登録されている（リポジトリなら最低限 `.git`。
-   プロジェクト固有の機密・生成物があればそれも含まれているか）
+- **Claude Code**: 有効な settings（CLI > local > project > user の合成結果）で
+  1. `sandbox.enabled` が `true`
+  2. `sandbox.filesystem.denyWrite` に保護対象が登録されている（リポジトリなら最低限 `.git`。
+     プロジェクト固有の機密・生成物があればそれも含まれているか）
+- **codex**: `sandbox_mode` が `danger-full-access` でない（`workspace-write` を推奨）。
+  加えて `.codex/hooks.json` の hook が信頼登録済みであること（未信頼だと prototype-guard が黙って効かない）
 
 **満たさなければ本スキルを起動せず中止し、理由を伝える。**
-Why: sandbox 無しで Bash 自由化を使うと、denyWrite 登録パス（`.git` 等）が rm で物理的に消せてしまい
-復旧不能になる。denyWrite（OS 境界）が保護対象の唯一の物理防壁であり、本スキルの安全性の土台。
-**保護対象はプロジェクトごとに異なるため、本スキルは特定パスを前提にせず denyWrite の中身を尊重する。**
+Why: sandbox 無しで Bash 自由化を使うと、保護パス（`.git` 等）が rm で物理的に消せてしまい
+復旧不能になる。物理防壁（Claude Code は denyWrite、codex は workspace 境界 + hook 群）が本スキルの安全性の土台。
+**保護対象はプロジェクトごとに異なるため、本スキルは特定パスを前提にせず配置済みの防壁設定を尊重する。**
 
 ## テスト禁止
 
@@ -64,12 +67,12 @@ Why: sandbox 無しで Bash 自由化を使うと、denyWrite 登録パス（`.g
 
 | 操作 | 扱い | 担当 |
 |---|---|---|
-| コード本体の編集・新規作成 | 承認なしで許可（テスト不要） | settings の allow `Edit(**)` / `Write(**)` |
-| `*.test.*` の作成・編集 | **deny** | `prototype-guard.sh` |
-| sandbox 内で完結する Bash（read-only / ビルド等） | 承認なしで許可 | sandbox の `autoAllowBashIfSandboxed` |
-| rm / mv / sed -i 等の削除・上書き系 Bash | ask（都度確認） | settings の ask ルール |
-| denyWrite 登録パスの実際の改変・削除 | 物理拒否 | sandbox `denyWrite` |
-| プロジェクト外への書き込み・削除 | 物理拒否 | sandbox CWD 境界 |
+| コード本体の編集・新規作成 | 承認なしで許可（テスト不要） | claude: settings の allow `Edit(**)` / `Write(**)` ・ codex: sandbox workspace-write |
+| `*.test.*` の作成・編集 | **deny** | `prototype-guard.sh`（codex は `$prototype` 起動の skill-session marker で有効化） |
+| sandbox 内で完結する Bash（read-only / ビルド等） | 承認なしで許可 | claude: `autoAllowBashIfSandboxed` ・ codex: sandbox workspace-write |
+| rm / mv / sed -i 等の削除・上書き系 Bash | 都度確認 | claude: settings の ask ルール ・ codex: `.codex/rules` の prompt |
+| 保護パス（`.git` / `.env` 等）の改変・削除 | 物理拒否 | claude: sandbox `denyWrite`（+ hook 二重層） ・ codex: `protect-git-dir.sh` / `protect-env.sh` |
+| プロジェクト外への書き込み・削除 | 物理拒否 | claude: sandbox CWD 境界 ・ codex: workspace 境界 |
 
 ## フロー
 
@@ -79,14 +82,15 @@ Why: sandbox 無しで Bash 自由化を使うと、denyWrite 登録パス（`.g
    - `from-prompt` → `.prompt.md` の設計を読み取り、要約を報告して次へ
 3. 最小の動くものを実装（テストは書かない・可逆領域でぶん回す）
 4. **実行**して動作を確認（テストではなく実行で）
-5. 一段落したら `AskUserQuestion` で「修正を続ける / 終了」を問う
+5. 一段落したらユーザーに「修正を続ける / 終了」を問う（Claude Code では確認に `AskUserQuestion` ツールを使う）
    - **修正を続ける** → 依頼を聞いて直し、4 に戻る（自動化は settings と sandbox が担うので承認なしで回せる）
    - **終了** → 以降ロックする（「## 終了とロック」を厳守）
 
 ## 終了とロック
 
 本スキルの hook（テスト禁止）は **起動したセッションが終わるまで効き続ける**
-（skill のメッセージがコンテキストに残り続けるため。実測で確認済み）。
+（claude: skill のメッセージがコンテキストに残り続けるため・実測で確認済み /
+codex: skill-session marker が session_id 単位で効き、セッションが替わると自動失効するため）。
 途中でファイル等のステートを使って hook を無効化することは **しない**。
 Why: プロセスが死ぬとステートは消えずにリーク／ゴミ化する。off スイッチをファイルに置くと、
 プロセスの生死とステートの生死がズレる。
@@ -94,7 +98,7 @@ Why: プロセスが死ぬとステートは消えずにリーク／ゴミ化す
 代わりに **「1セッション = 1プロトタイプ」** とする。off スイッチはセッションそのものの終了。
 プロセスが死ねば hook も会話ごと消えるので、後始末が要らずリークもゴミも原理的に発生しない。
 
-ユーザーが AskUserQuestion で **「終了」を選んだら、以降は次を厳守する**:
+ユーザーが **「終了」を選んだら、以降は次を厳守する**:
 - いかなる入力に対しても、**ツールを一切呼ばず**（Read / Edit / Write / Bash すべて禁止）、
   「`/exit`（または Ctrl+C）でこのセッションを終了してください。本実装は新しいセッションで
   tdd-run へ。」の一文だけを返す。
