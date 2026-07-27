@@ -1,13 +1,13 @@
 ---
 name: rebase-squash
-description: "1 ファイル = 1 コミットで積んだ [claude]: 履歴を、未 push 範囲だけ機能単位に squash する。分類は LLM・履歴操作は決定的スクリプト（temp worktree リプレイ → 二重検証 → swap）。正常系の承認ゲートはグルーピング承認の 1 つだけ"
-allowed-tools: Read, Grep, Glob, Shell, Write, AskUserQuestion
+description: "1 ファイル = 1 コミットで積んだ [[agent_name]]: 履歴を、未 push 範囲だけ機能単位に squash する。分類は LLM・履歴操作は決定的スクリプト（temp worktree リプレイ → 二重検証 → swap）。正常系の承認ゲートはグルーピング承認の 1 つだけ"
+allowed-tools: Read, Grep, Glob, Bash, Write, AskUserQuestion
 disable-model-invocation: true
 ---
 
 ## 目的
 
-「[claude]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット運用で積み上がった細かいコミットを、
+「[[agent_name]]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット運用で積み上がった細かいコミットを、
 レビューに出せる機能単位の履歴へ組み替える。**履歴書き換えの唯一の公認経路**であり、
 生の rebase / filter-branch / force push は deny-history-rewrite.sh が deny する。
 
@@ -22,21 +22,21 @@ disable-model-invocation: true
 
 | ゲート | タイミング | 手段 |
 |---|---|---|
-| **GATE: グルーピング承認** | plan 確定時に 1 回 | `AskUserQuestion`（承認 / 調整） |
+| **GATE: グルーピング承認** | plan 確定時に 1 回 | ユーザーへの確認（承認 / 調整） |
 
 コンフリクト等で plan を作り直した場合は再度 GATE を通す（新しい plan は新しい契約）。
-それ以外で `AskUserQuestion` を呼ばない。
+それ以外でユーザーに確認を求めない（Claude Code では確認に `AskUserQuestion` ツールを使う）。
 
 ## 実行フロー
 
 ### Step 0: 前提検査（スクリプト）
 
 ```
-bash .claude/skills/rebase-squash/rebase-squash.sh --check [--base <ref>]
+bash [skills_root]/rebase-squash/rebase-squash.sh --check [--base <ref>]
 ```
 
 - clean tree / merge コミットなし / **範囲の全コミットが全リモート ref から不可視** /
-  `[claude]:` 以外のコミットは境界（それより古い側は対象外）— 判定はすべてスクリプトが機械的に行う
+  `[[agent_name]]:` 以外のコミットは境界（それより古い側は対象外）— 判定はすべてスクリプトが機械的に行う
 - upstream が無いリポジトリでは `--base` が必須。どこを起点にするかはユーザーに確認する
 - `NOTHING-TO-DO` が出たら正直にそう報告して終了する。無理にやることを探さない
 
@@ -59,8 +59,8 @@ bash .claude/skills/rebase-squash/rebase-squash.sh --check [--base <ref>]
 
 ### GATE: グルーピング承認（停止）
 
-「元コミット → グループ → 新 subject」の対応表を提示して `AskUserQuestion` で承認・調整を求める。
-subject は「`[claude]: {機能}/{変更内容(日本語)}`」形式。承認が出るまで実行に進まない。
+「元コミット → グループ → 新 subject」の対応表を提示してユーザーに承認・調整を求める。
+subject は「`[[agent_name]]: {機能}/{変更内容(日本語)}`」形式。承認が出るまで実行に進まない。
 
 ### Step 2: 実行（スクリプト）
 
@@ -70,14 +70,14 @@ plan を scratchpad に JSON で Write してスクリプトに渡す:
 {
   "base": "<--check が出力した BASE の full sha>",
   "groups": [
-    { "subject": "[claude]: 契約一覧API/一覧取得APIとバリデーションスキーマを追加した",
+    { "subject": "[[agent_name]]: 契約一覧API/一覧取得APIとバリデーションスキーマを追加した",
       "commits": ["<sha>", "<sha>"] }
   ]
 }
 ```
 
 ```
-bash .claude/skills/rebase-squash/rebase-squash.sh <plan.json> [--base <ref>]
+bash [skills_root]/rebase-squash/rebase-squash.sh <plan.json> [--base <ref>]
 ```
 
 - groups の並び = squash 後のコミット順。グループ内の commits の並びは無視される

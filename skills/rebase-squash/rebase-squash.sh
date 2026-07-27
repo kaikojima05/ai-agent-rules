@@ -1,6 +1,6 @@
 #!/bin/bash
 # rebase-squash スキルの決定的実行スクリプト。
-# 「[claude]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット履歴を、未 push 範囲だけ
+# 「[<エージェント名>]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット履歴を、未 push 範囲だけ
 # 機能単位の squash 履歴へ組み替える。履歴書き換えの唯一の公認経路
 # （生の rebase / filter-branch / force push は deny-history-rewrite.sh が deny する）。
 #
@@ -20,6 +20,9 @@ set -u
 
 err() { echo "ERROR: $*" >&2; }
 die() { err "$*"; exit 1; }
+
+# コミット契約のタグ（メッセージ先頭の「[<タグ>]: 」）。配置時に init-agent が確定させる
+AGENT_TAG="[agent_name]"
 
 MODE="" PLAN="" BASE_ARG=""
 while [ $# -gt 0 ]; do
@@ -59,11 +62,11 @@ INVISIBLE=$(git rev-list --count "$BASE..$ORIG" --not --remotes)
 [ "$TOTAL" -eq "$INVISIBLE" ] || \
   die "範囲内にリモートへ push 済みのコミットが $((TOTAL - INVISIBLE)) 件ある。共有履歴は書き換えない"
 
-# [claude]: 以外のコミットは境界: 最新の非 [claude] コミットより古い側は対象から外す
+# 契約タグ以外のコミットは境界: 最新の非タグコミットより古い側は対象から外す
 EFFECTIVE_BASE=$BASE
 while IFS=$'\t' read -r sha subject; do
   case "$subject" in
-    "[claude]: "*) ;;
+    "[${AGENT_TAG}]: "*) ;;
     *) EFFECTIVE_BASE=$sha ;;
   esac
 done < <(git log --reverse --format='%H%x09%s' "$BASE..$ORIG")
@@ -99,10 +102,10 @@ NGROUPS=$(jq '.groups | length' "$PLAN")
 [ "$NGROUPS" -ge 1 ] || die "plan の groups が空"
 
 # 契約検証をスクリプトに内蔵する: enforce-claude-commit.sh はスクリプト内部の commit を
-# 見られない(コマンド文字列検査のため)ので、同じ契約をここで自前検査する
+# 見られない(コマンド文字列検査のため)ので、同じ契約を同じ regex でここでも検査する
 while IFS= read -r subj; do
-  echo "$subj" | grep -qE '^\[claude\]: [^ /]+/.+' || \
-    die "subject が「[claude]: {機能}/{変更内容}」形式でない: $subj"
+  echo "$subj" | grep -qE "^\[${AGENT_TAG}\]: [^[:space:]/]+(/[^[:space:]/]+)*/.+" || \
+    die "subject が「[${AGENT_TAG}]: {機能}/{変更内容}」形式でない: $subj"
   echo "$subj" | grep -qiE 'co-authored-by|generated with' && \
     die "subject に AI 署名が含まれる: $subj"
 done < <(jq -r '.groups[].subject' "$PLAN")
