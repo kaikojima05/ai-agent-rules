@@ -42,57 +42,86 @@ ai-agent-rules/
 
 ## 使い方
 
-1. このリポジトリの `AGENTS.md` / `rules/` / `skills/` / `hooks/` / `prompt/` / `e2e/` を、対象プロジェクトの該当パスにコピーする。
-   - claude: すべて `.claude/` 配下（skills は `.claude/skills/`）
-   - codex: hooks / rules / prompt / e2e は `.codex/` 配下、**skills だけは `.agents/skills/`**（codex はリポジトリ内の skills をそこからしか読まない）
-2. 対象エージェントに応じて `init-agent` スキルを実行し、placeholder（`[agent_name]` / `[skills_root]`）および `[NOTE]: init-agent 対象` を解決する。
+### Codex への配置
 
-   ```
-   # claude
-   /init-agent claude
+Codex は次の対応を崩さずに配置する。共通の Markdown 規約と execpolicy は、拡張子が異なるため `.codex/rules/` で共存できる。
 
-   # codex（スキルは $ メンションで呼び出す）
-   $init-agent codex
-   ```
+| 配布元 | 配置先 |
+|---|---|
+| `AGENTS.md` | `<repo>/AGENTS.md` |
+| `codex/config.toml` | `<repo>/.codex/config.toml` |
+| `codex/hooks.json` | `<repo>/.codex/hooks.json` |
+| `codex/.gitignore` | `<repo>/.codex/.gitignore` |
+| `codex/rules/default.rules` | `<repo>/.codex/rules/default.rules` |
+| `hooks/` | `<repo>/.codex/hooks/` |
+| `rules/` | `<repo>/.codex/rules/` |
+| `prompt/` | `<repo>/.codex/prompt/` |
+| `e2e/` | `<repo>/.codex/e2e/` |
+| `skills/` | `<repo>/.agents/skills/` |
 
-3. 必要に応じて各エージェント固有の設定（`claude/settings.json`, `codex/config.toml` 等）を配置する。
+配置後は次の順序で有効化する。
+
+1. Codex の対話セッションを対象リポジトリで開き、project を trusted にする。未信頼では project-local の config / hooks / rules がすべて無視される。
+2. `$init-agent codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）と `[NOTE]: init-agent 対象` を解決する。配布rulesは正確な init-agent コマンドだけをsandbox外でallowする。
+3. `/hooks` を開き、**init-agent 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
+4. Codexを再起動し、config / rules / hooks / skillsを新しいセッションで読み直す。
+
+Claude Code は `AGENTS.md` と共通ディレクトリを `.claude/` 配下へ配置し、ルートの `CLAUDE.md` に `@AGENTS.md` を置いた上で `/init-agent claude` を実行する。
+
+対象エージェントに応じた呼び出し形式:
+
+```
+# claude
+/init-agent claude
+
+# codex
+$init-agent codex
+```
 
 ## 注意
 
 - 本リポジトリはテンプレートなので、`init-agent` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - placeholder の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れは grep で確認する。
 - Claude Code は `AGENTS.md` を自動読み込みしない（`CLAUDE.md` のみ）。そのため `claude/CLAUDE.md`（中身は `@AGENTS.md`）を配置時にプロジェクトルートへ展開して読ませる。codex は `AGENTS.md` を直読みするため不要。
-- codex の hook（`.codex/hooks.json`）は**配置しただけでは実行されない**。hook は信頼登録制（`~/.codex/config.toml` の `hooks.state` に hash 登録）で、未信頼のまま `codex exec` を使うと**黙ってスキップされる**。初回に対話セッションを開いて信頼を承認すること（検証用の一時迂回フラグは `--dangerously-bypass-hook-trust`）。
+- Codex の `workspace-write` は `.git` / `.codex` / `.agents` を再帰的にread-onlyにする。設定更新は配布rulesが限定allowする固定スクリプトだけを使い、汎用の `cp` / `sed` に例外を与えない。
+- Codex の hook は**配置しただけでは実行されない**。`/hooks` で現在の定義をレビューして信頼すること。未信頼のhookはスキップされる（検証用の一時迂回フラグは `--dangerously-bypass-hook-trust`）。
 
 ## 承認の挙動
 
-このテンプレートを適用すると、エージェントの操作は次のように振り分けられる。
+両エージェントで共通化している主な挙動:
 
 | やろうとすること | どうなる |
 |---|---|
 | ファイルを読む・探す（`ls` `cat` `grep`） | ✅ 自動 |
 | 通常ファイルを書き換える（コード・テスト・ドキュメント） | ✅ 自動 |
-| 自分の localhost サーバーを叩く（`curl` 等） | ✅ 自動 |
-| 依存を触る（`package.json` / lockfile） | 🙋 確認 |
-| CI/CD・インフラを触る（`.github/workflows` `Dockerfile` `*.tf`） | 🙋 確認 |
-| DB の不可逆変更（`migrations/` `schema.prisma`） | 🙋 確認 |
-| 復元できない全上書き（未コミット差分あり / git 管理外） | 🙋 確認 |
 | ファイルを消す（`rm`）・シェルで上書きする（`sed -i` 等） | 🙋 確認 |
 | 外部のサーバーにデータを送る | 🙋 確認 |
 | 契約に従うコミット（`[<エージェント名>]: {ファイル名}/{内容}`・1 ファイル単位） | ✅ 自動 |
 | `tdd-run` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
-| `.env` / `.git/` / `.claude/` を書き換える | 🚫 禁止 |
+| `.env` / `.git/` / エージェント設定を直接書き換える | 🚫 禁止 |
 | 契約に反するコミット（prefix 無し・`-a` 一括・AI 署名・`--amend`） | 🚫 禁止 |
 | `git push`、依存の install / add | 🚫 禁止 |
+
+エージェント実装上の差分:
+
+| 操作 | Claude Code | Codex |
+|---|---|---|
+| localhost へのHTTP request | sandbox内で自動 | shell network遮断のためsandbox外承認 |
+| `package.json` / CI / migration 等のpath単位確認 | settingsのaskで強制 | 現行PreToolUseはask未対応。AGENTS規約とレビューで扱う |
+| 既存ファイルの全面Write | `guard-overwrite.sh`でask | `apply_patch`は部分差分。opaque shellはrulesでprompt |
+| 設定・skillの更新 | sandbox除外済み固定スクリプト | rulesでallowした固定スクリプト |
 
 挙動を決めている実体（想定外の動きをしたらここを見る）:
 
 - 許可 / 確認 / 禁止の名簿（コマンドと書き込みパスのリスク分類） → `claude/settings.local.json`
+- Codex のsandbox / network / hook有効化 → `codex/config.toml`
+- Codex のコマンド単位の許可 / 確認 / 禁止 → `codex/rules/default.rules`
+- Codex のhookイベントと実行timeout → `codex/hooks.json`
 - テストの有無でコード書き込みを判定（`tdd-run` 稼働中のみ deny） → `hooks/shell/require-test.sh`（claude: tdd-run の frontmatter hooks で起動 / codex: 常時配線 + `skill-session.sh` の marker で tdd-run 稼働中のみ執行）
-- 復元できない全上書きだけ確認に通す → `hooks/shell/guard-overwrite.sh`
+- 復元できない全上書きだけ確認に通す（Claude Code） → `hooks/shell/guard-overwrite.sh`
+- `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-agent-config.sh`
 - 機密ファイル（`.env` / `.env.*`）の書き込み・削除の封じ込め → `hooks/shell/protect-env.sh`（claude は denyWrite との二重層、codex では唯一の per-path 防壁）
 - コミット契約（`[<エージェント名>]:` 形式・1 ファイル単位・AI 署名禁止）の執行 → `hooks/shell/enforce-claude-commit.sh`
-- 書き込み先・通信先の封じ込め → `claude/settings.json`（sandbox）
 
 ## テスト
 
@@ -104,6 +133,6 @@ bash tests/verify-all.sh
 
 - `tests/verify-all.sh` — 統合スイート。一時ディレクトリに claude / codex の配置を再現し、`init-agent` の placeholder 置換・`[NOTE]` 解決を実行したうえで全 hook を検証する。最後に `PASS=n FAIL=0` を出す
 - `tests/run-tests.sh` — hook 全数の deny / ask / 棄権テスト（`verify-all.sh` から呼ばれる。単体では動かない）
-- 検証範囲: 構文 / 実行ビット / 配置シミュレーション（claude・codex）/ placeholder 置換漏れ / hook の決定 JSON が汚染されていないこと / `skill-session` の発火スコープ / `rebase-squash` の E2E（squash・tree 同一性・不正 plan の拒否・境界判定）
-- 前提: `jq` と `git`。作業ファイルは一時ディレクトリに作られリポジトリを汚さない
-- `tests/` は配布対象外（`setup-agent` が配置時に削除する）
+- 検証範囲: 構文 / 実行ビット / 配置シミュレーション（claude・codex）/ Codex config strict読込 / execpolicy判定 / hook参照先・timeout / placeholder置換漏れ / hook決定JSON / `skill-session`の発火スコープ / 固定宛先スクリプト / `rebase-squash` E2E
+- 前提: `jq` と `git`。Codex CLI があれば config / rules の実機検査も実行し、無い環境ではその部分だけskipする
+- 作業ファイルは一時ディレクトリに作られ、終了時に削除される。`tests/` 自体は配布対象外
