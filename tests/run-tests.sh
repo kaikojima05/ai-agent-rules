@@ -36,6 +36,13 @@ check "protect-git-dir: Edit .git/config は deny" deny protect-git-dir.sh '{"to
 check "protect-git-dir: 通常 Edit は棄権"     empty protect-git-dir.sh '{"tool_name":"Edit","tool_input":{"file_path":"src/a.ts"}}'
 check "protect-git-dir: git status は棄権"    empty protect-git-dir.sh '{"tool_name":"Bash","tool_input":{"command":"git status"}}'
 
+# --- protect-agent-config ---
+check "agent-config: Edit .claude は deny"    deny  protect-agent-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/settings.json"}}'
+check "agent-config: Edit .agents は deny"    deny  protect-agent-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".agents/skills/foo/SKILL.md"}}'
+check "agent-config: rm .claude は deny"      deny  protect-agent-config.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .claude"}}'
+check "agent-config: 設定読み取りは棄権"      empty protect-agent-config.sh '{"tool_name":"Bash","tool_input":{"command":"cat .claude/settings.json"}}'
+check "agent-config: 設定script起動は棄権"    empty protect-agent-config.sh '{"tool_name":"Bash","tool_input":{"command":"bash .claude/skills/init-agent/init-agent.sh claude"}}'
+
 # --- deny-history-rewrite ---
 check "history-rewrite: git rebase は deny"   deny  deny-history-rewrite.sh '{"tool_name":"Bash","tool_input":{"command":"git rebase -i HEAD~3"}}'
 check "history-rewrite: force push は deny"   deny  deny-history-rewrite.sh '{"tool_name":"Bash","tool_input":{"command":"git push -f origin master"}}'

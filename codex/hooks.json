@@ -1,11 +1,13 @@
 {
+  "description": "Project guardrails shared by the distributed Codex configuration.",
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/skill-session.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/skill-session.sh\"",
+            "timeout": 5
           }
         ]
       }
@@ -15,7 +17,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/skill-session.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/skill-session.sh\"",
+            "timeout": 3
           }
         ]
       }
@@ -26,19 +29,28 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/require-test.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/require-test.sh\"",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/prototype-guard.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/prototype-guard.sh\"",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git-dir.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git-dir.sh\"",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-env.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-agent-config.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-env.sh\"",
+            "timeout": 5
           }
         ]
       },
@@ -47,27 +59,38 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-inline-eval.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-inline-eval.sh\"",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-registry-fetch.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-registry-fetch.sh\"",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-history-rewrite.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-history-rewrite.sh\"",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git-dir.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git-dir.sh\"",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-env.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-agent-config.sh\"",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/enforce-claude-commit.sh\""
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-env.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/enforce-claude-commit.sh\"",
+            "timeout": 5
           }
         ]
       }
