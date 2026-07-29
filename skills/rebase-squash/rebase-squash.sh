@@ -15,7 +15,9 @@
 #   検証前に本体ブランチと作業ツリーには一切触れないため、失敗時は temp worktree を
 #   消すだけでよく、復元パスが存在しない。
 # 失敗の扱い: 検査・リプレイ・検証のどこで落ちても ERROR を stderr へ出して exit 1
-#   （成功したふりの禁止）。push と backup ブランチの削除は本スクリプトは行わない。
+#   （成功したふりの禁止）。push は本スクリプトは行わない。
+# backup ブランチ: swap（reset --hard）の間だけ ORIG へ名前を張る一時的な足場であり、
+#   swap 成功後は削除する。成功時に残さないので、backup が残っていれば swap 失敗の証拠になる。
 set -u
 
 err() { echo "ERROR: $*" >&2; }
@@ -123,7 +125,7 @@ fi
 
 BACKUP="backup/rebase-squash-$(git rev-parse --short=7 "$ORIG")"
 git show-ref --verify --quiet "refs/heads/$BACKUP" && \
-  die "backup ブランチが既に存在する: ${BACKUP}。前回の残骸の確認と削除は人間の仕事"
+  die "backup ブランチが既に存在する: ${BACKUP}。成功時は自動削除されるので、これは前回の swap が失敗した証拠。確認と削除は人間の仕事"
 
 WT=$(mktemp -d "${TMPDIR:-/tmp}/rebase-squash.XXXXXX") || die "temp dir を作れない"
 cleanup() {
@@ -179,9 +181,13 @@ if ! git reset --hard "$NEW_TIP" >/dev/null 2>&1; then
   cleanup
   die "swap(reset --hard) に失敗。ブランチは $BACKUP と reflog から復旧できる"
 fi
+# swap 成功。backup はここまでの足場であり、成果物ではないので削除する。
+# 削除に失敗しても swap 自体は成功しているので、警告に留めて成功扱いにする
+git branch -D "$BACKUP" >/dev/null 2>&1 || \
+  echo "WARN: backup ブランチを削除できなかった: $BACKUP (手動で削除すること)" >&2
 cleanup
 
 echo "OK: $COUNT commits -> $NGROUPS commits"
-echo "backup: $BACKUP (確認後の削除は人間の仕事。エージェントによる削除は hook が deny する)"
+echo "元 HEAD: $ORIG (backup ブランチは削除済み。reflog から辿れる)"
 echo "検証: tree 一致(元 HEAD と diff 空) / 全コミット exactly-once 消費"
 git log --reverse --format='%h%x09%s' "$EFFECTIVE_BASE..HEAD"

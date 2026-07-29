@@ -90,11 +90,12 @@ bash [skills_root]/rebase-squash/rebase-squash.sh <plan.json> [--base <ref>]
 
 ### Step 3: 報告
 
-squash 後の履歴・backup ブランチ名・検証結果（tree 一致 / exactly-once）を報告する。
+squash 後の履歴・元 HEAD の sha・検証結果（tree 一致 / exactly-once）を報告する。
 
 - **push はしない**。squash 後の履歴を最終確認して push するのは人間の仕事
-- **backup（`backup/rebase-squash-{元sha7}`）は消さない**。確認後の削除も人間の仕事
-  （エージェントによる削除は deny-history-rewrite.sh が deny する）
+- backup ブランチは残らない。swap の間だけ張る一時的な足場で、成功したらスクリプトが自ら削除する
+  （元 HEAD は reflog から辿れる）。`backup/rebase-squash-*` が残っていたら swap が失敗した証拠なので、
+  その確認と削除は人間の仕事（エージェントによる削除は deny-history-rewrite.sh が deny する）
 
 ## 注意事項
 
@@ -104,5 +105,5 @@ squash 後の履歴・backup ブランチ名・検証結果（tree 一致 / exac
 - author date は失われる（squash とは元々そういう操作）。identity は git config の本人のまま、
   Co-Authored-By 等の AI 署名は入らない — enforce-claude-commit.sh と同じ契約をスクリプトが内蔵する
 - commit message は plan の subject 1 行のみで body は付けない。何をまとめたかを元履歴で
-  確認できるのは backup ブランチが残っている間だけ
+  確認したい場合は reflog の元 HEAD を辿る（squash 直後の報告に元 HEAD の sha を出す）
 - 本スキルは AGENTS.md「Git 運用」の従属物。規約が変わったら本スキルより規約が優先

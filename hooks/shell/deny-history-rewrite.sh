@@ -1,7 +1,7 @@
 #!/bin/bash
 # PreToolUse(Bash) hook: エージェント自身による履歴書き換えコマンドを deny する。
 # 契約: コミット履歴の書き換えは禁止。唯一の例外は rebase-squash スキルの決定的スクリプト
-#       （未 push 範囲・backup 作成・tree 同一性検証を条件とする squash）。
+#       （未 push 範囲・tree 同一性検証を条件とする squash）。
 #       スクリプトの呼び出しは git コマンドではないため本 hook には掛からず、
 #       settings.local.json の ask ルール（人間の承認）に乗る。
 #       ※ かつては sandbox(denyWrite .git) が暗黙のゲートだったが、denyWrite を
@@ -32,7 +32,7 @@ echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+push[^;&|]*([[:space
   hook_deny "force push は共有履歴の破壊のため禁止です。必要ならユーザー自身が実行してください。"
 
 # 復旧手段（reflog / 到達不能オブジェクト）の破壊。
-# rebase-squash の安全網は backup ブランチと reflog なので、これらを消す操作は例外なく止める
+# rebase-squash 成功後の安全網は reflog だけになるので、これらを消す操作は例外なく止める
 echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+reflog[[:space:]]+(expire|delete)' && \
   hook_deny "git reflog expire/delete は履歴復旧の安全網を壊すため禁止です。"
 echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+gc[^;&|]*--prune=(now|all)' && \
@@ -40,10 +40,12 @@ echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+gc[^;&|]*--prune=(no
 echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+prune([[:space:]]|$)' && \
   hook_deny "git prune は到達不能コミットの復旧を不可能にするため禁止です。"
 
-# rebase-squash の backup ブランチ削除（squash 結果の最終確認と backup の削除は人間の仕事）
+# rebase-squash の backup ブランチ削除。
+# 成功時の backup はスクリプト自身が消すため、残っているものは swap 失敗の残骸＝元 HEAD への
+# 唯一の名前付き参照であり、エージェントが消してよいものではない
 if echo "$MASKED" | grep -q 'backup/rebase-squash-'; then
   echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+(branch[^;&|]*[[:space:]](-D|-d|--delete)([[:space:]]|$)|update-ref[^;&|]*[[:space:]]-d[[:space:]])' && \
-    hook_deny "backup/rebase-squash-* ブランチの削除は禁止です。squash 結果の最終確認と backup の削除はユーザー自身が行ってください。"
+    hook_deny "backup/rebase-squash-* が残っているのは swap が失敗したときだけです。元 HEAD への参照なので、確認と削除はユーザー自身が行ってください。"
 fi
 
 exit 0
