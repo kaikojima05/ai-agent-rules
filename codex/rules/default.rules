@@ -11,7 +11,12 @@ prefix_rule(
 prefix_rule(
     pattern = ["bash", ".agents/skills/compose-prompt/apply-prompt.sh"],
     decision = "allow",
-    justification = "確認済みドラフトを固定の.codex/prompt/.prompt.mdへ反映します。",
+    justification = "確認済みドラフトをdraft-prompt/から固定の.codex/prompt/へ移します。",
+)
+prefix_rule(
+    pattern = ["bash", ".agents/skills/run-agent/mark-prompt-done.sh"],
+    decision = "allow",
+    justification = "実装済みの設計書を固定の.codex/prompt/.prompt.md上で[x]に倒します。",
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/e2e/apply-e2e-plan.sh"],
