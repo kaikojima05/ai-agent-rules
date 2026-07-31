@@ -19,8 +19,8 @@ ai-agent-rules/
 │   └── typescript/         # TypeScript プロジェクト固有のルール
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
 │   ├── init-agent/         # placeholder（[agent_name] / [skills_root]）と [NOTE] の解決
-│   ├── compose-prompt/     # 対話でプロンプトを組み立てて .prompt.md へ反映
-│   ├── run-agent/          # .prompt.md の内容を実行
+│   ├── compose-prompt/     # 対話で機能ごとの設計書を組み立てて prompt/ へ反映
+│   ├── run-agent/          # 設計書を実装順に 1 枚だけ実装して停止
 │   ├── tdd-run/            # TDD サイクルを 2 ゲートで自動連続実行
 │   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
 │   ├── rebase-squash/      # 1 ファイル = 1 コミット履歴を機能単位に squash
@@ -33,7 +33,7 @@ ai-agent-rules/
 │   └── e2e/                # chrome-devtools-mcp による E2E テスト
 ├── hooks/
 │   └── shell/              # PreToolUse hook 本体（hook-io.sh がスキーマ差分を吸収）
-├── prompt/             # .prompt.md の配置先シード（compose-prompt / run-agent が使用）
+├── prompt/             # 実装順 index（.prompt.md）と設計書の配置先シード（compose-prompt / run-agent が使用）
 ├── e2e/                # .e2e.md の配置先シード（e2e スキルが使用）
 ├── claude/             # Claude Code 用の設定（settings.json, CLAUDE.md 等）
 ├── codex/              # Codex 用の設定（config.toml, hooks.json, rules/）
