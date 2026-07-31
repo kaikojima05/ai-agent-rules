@@ -42,6 +42,56 @@ grep -q 'bash .claude/skills/rebase-squash/rebase-squash.sh' .claude/skills/reba
 LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
 [ "$LEFT" = "0" ] && ok "置換漏れゼロ(claude)" || { ng "置換漏れ $LEFT 件(claude)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude | grep -v '/init-agent/'; }
 
+echo "== 2.5 compose-prompt / run-agent の設計書フロー（claude 配置） =="
+AP=".claude/skills/compose-prompt/apply-prompt.sh"
+MD=".claude/skills/run-agent/mark-prompt-done.sh"
+mkdir -p draft-prompt
+printf '# 実装順\n\n- [ ] branch-user-api-prompt.md\n- [ ] branch-user-form-prompt.md\n' > draft-prompt/.prompt.md
+echo api > draft-prompt/branch-user-api-prompt.md
+echo form > draft-prompt/branch-user-form-prompt.md
+bash "$AP" > apply.out 2>&1
+if [ -f .claude/prompt/.prompt.md ] && [ -f .claude/prompt/branch-user-api-prompt.md ] && [ -f .claude/prompt/branch-user-form-prompt.md ]; then
+  ok "apply-prompt: index と設計書を固定宛先へ反映"
+else
+  ng "apply-prompt: 固定宛先への反映漏れ"; cat apply.out
+fi
+[ ! -d draft-prompt ] && ok "apply-prompt: 反映後に draft-prompt/ を畳む" || ng "apply-prompt: draft-prompt/ が残った"
+# 引数を受け取らない = 削除先を外から動かせない、が安全性の根拠。引数追加の再発を検知する
+grep -q 'SRC_DIR="draft-prompt"' "$AP" && ok "apply-prompt: 移動元がスクリプト内に固定" || ng "apply-prompt: 移動元が固定されていない"
+
+mkdir -p draft-prompt
+printf -- '- [ ] branch-billing-prompt.md\n' > draft-prompt/.prompt.md
+echo billing > draft-prompt/branch-billing-prompt.md
+bash "$AP" > apply2.out 2>&1
+if [ -f .claude/prompt/branch-billing-prompt.md ] && [ ! -e .claude/prompt/branch-user-api-prompt.md ] && [ ! -e .claude/prompt/branch-user-form-prompt.md ]; then
+  ok "apply-prompt: 前タスクの設計書を残さない"
+else
+  ng "apply-prompt: 前タスクの設計書が残った"; cat apply2.out
+fi
+
+mkdir -p draft-prompt
+printf -- '- [ ] branch-a-prompt.md\n' > draft-prompt/.prompt.md
+echo a > draft-prompt/branch-a-prompt.md
+echo memo > draft-prompt/memo.txt
+if bash "$AP" > apply3.out 2>&1; then ng "apply-prompt: 想定外ファイルを通した"; else ok "apply-prompt: 想定外ファイルを拒否"; fi
+[ -d draft-prompt ] && ok "apply-prompt: 失敗時は draft-prompt/ を畳まない" || ng "apply-prompt: 失敗時に draft-prompt/ を消した"
+rm -f draft-prompt/memo.txt
+
+printf -- '- [ ] branch-a-prompt.md\n- [ ] branch-b-prompt.md\n' > draft-prompt/.prompt.md
+if bash "$AP" > apply4.out 2>&1; then ng "apply-prompt: index と実体の食い違いを通した"; else ok "apply-prompt: index と実体の食い違いを拒否"; fi
+
+printf -- '- [ ] branch-a-prompt.md\n- [ ] ../evil.md\n' > draft-prompt/.prompt.md
+if bash "$AP" > apply5.out 2>&1; then ng "apply-prompt: 不正な index 行を通した"; else ok "apply-prompt: 不正な index 行を拒否"; fi
+rm -rf draft-prompt
+
+bash "$MD" billing > mark.out 2>&1
+grep -qE '^\- \[x\] branch-billing-prompt\.md$' .claude/prompt/.prompt.md && ok "mark-prompt-done: index を [x] に倒す" || { ng "mark-prompt-done: [x] に倒せない"; cat mark.out; }
+grep -q '^remaining: 0$' mark.out && ok "mark-prompt-done: 残件数を報告" || { ng "mark-prompt-done: 残件数の報告が無い"; cat mark.out; }
+if bash "$MD" billing > mark2.out 2>&1; then ng "mark-prompt-done: 二重マークを通した"; else ok "mark-prompt-done: 二重マークを拒否"; fi
+if bash "$MD" "../../etc/passwd" > mark3.out 2>&1; then ng "mark-prompt-done: 不正な機能名を通した"; else ok "mark-prompt-done: 不正な機能名を拒否"; fi
+if bash "$MD" nonexistent > mark4.out 2>&1; then ng "mark-prompt-done: 未登録の機能名を通した"; else ok "mark-prompt-done: 未登録の機能名を拒否"; fi
+rm -rf .claude/prompt
+
 echo "== 3. hook 全数テスト（claude 配置） =="
 cp "$SUITE/run-tests.sh" "$S/claude-sim/run-tests.sh"
 bash "$S/claude-sim/run-tests.sh" > hook-tests.out 2>&1
@@ -146,6 +196,11 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: init-agent の固定経路を allow" || ng "rules: init-agent 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: e2e plan の固定経路を allow" || ng "rules: e2e plan 判定失敗 out=[$OUT]"
+  # 引数なしで呼ぶ apply-prompt.sh が rules に一致するか（引数前提の書き方だと取りこぼす）
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/compose-prompt/apply-prompt.sh 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 引数なし apply-prompt を allow" || ng "rules: apply-prompt 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/run-agent/mark-prompt-done.sh user-api 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
 else
   echo "skip codex CLI が無いため config / rules 実機検査を省略"
 fi
@@ -200,6 +255,23 @@ echo "== 6. テンプレート残渣チェック =="
 command grep -rn "allowed-tools:.*Shell" "$REPO/skills" >/dev/null 2>&1 && ng "allowed-tools に Shell が残存" || ok "allowed-tools: Shell 残存なし"
 command grep -rn "hookSpecificOutput" "$REPO/hooks/shell" 2>/dev/null | grep -v hook-io.sh | grep -q . && ng "hook-io 以外にスキーマ直書き" || ok "スキーマ直書きは hook-io のみ"
 command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md" 2>/dev/null | grep -q . && { ng "[claude] 直書き残存"; command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md"; } || ok "[claude] 直書きゼロ"
+
+echo "== 7. 承認プロンプト回避の設定検査 =="
+# Claude Code の Bash 照合はコマンド文字列そのままで行われ、末尾 ` *` / `:*` は
+# 「スペース + 何か」を要求する。引数なしで呼ぶスクリプトをワイルドカード形だけで
+# 登録すると一致せず承認プロンプトが復活するため、両形の登録を必須にする。
+SJ="$REPO/claude/settings.json"; SL="$REPO/claude/settings.local.json"
+jq -e . "$SJ" >/dev/null 2>&1 && ok "settings.json 構文" || ng "settings.json 構文"
+jq -e . "$SL" >/dev/null 2>&1 && ok "settings.local.json 構文" || ng "settings.local.json 構文"
+MISS=0
+for SC in init-agent/init-agent.sh compose-prompt/apply-prompt.sh run-agent/mark-prompt-done.sh e2e/apply-e2e-plan.sh; do
+  CMD="bash .claude/skills/$SC"
+  jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
+  jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }
+  jq -e --arg c "Bash($CMD)"    '.permissions.allow | index($c)' "$SL" >/dev/null 2>&1 || { ng "allow に引数なし形が無い: $SC"; MISS=1; }
+  jq -e --arg c "Bash($CMD:*)"  '.permissions.allow | index($c)' "$SL" >/dev/null 2>&1 || { ng "allow に引数あり形が無い: $SC"; MISS=1; }
+done
+[ "$MISS" = "0" ] && ok "固定スクリプトは引数あり・なし両形で登録済み"
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
