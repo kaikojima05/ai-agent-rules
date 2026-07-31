@@ -58,8 +58,13 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "excludedCommands": [
+      "bash .claude/skills/init-agent/init-agent.sh",
       "bash .claude/skills/init-agent/init-agent.sh *",
+      "bash .claude/skills/compose-prompt/apply-prompt.sh",
       "bash .claude/skills/compose-prompt/apply-prompt.sh *",
+      "bash .claude/skills/run-agent/mark-prompt-done.sh",
+      "bash .claude/skills/run-agent/mark-prompt-done.sh *",
+      "bash .claude/skills/e2e/apply-e2e-plan.sh",
       "bash .claude/skills/e2e/apply-e2e-plan.sh *"
     ],
     "filesystem": {
