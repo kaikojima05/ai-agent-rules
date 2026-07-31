@@ -50,7 +50,10 @@ bash [skills_root]/init-agent/init-agent.sh <agent>
 - 上記3種以外を扱う場合は、スクリプトの `case` に分岐を追加してから実行する
 - Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る（permission は `settings.local.json` の事前 allow が担保するため承認プロンプトは出ない）
   - Why: 対象ツリー（`.claude/` 等）は sandbox の denyWrite で保護されており、sandbox 内での実行は必ず「Operation not permitted」で失敗する。失敗→sandbox 外で再実行という二度手間を踏まないための除外設定である
-  - `excludedCommands` と事前 allow はコマンド文字列の前方一致で照合されるため、必ずプロジェクトルートから上記の相対パス形式で呼ぶこと。絶対パスや `cd` 連結で呼ぶとどちらにも一致せず、sandbox 内実行の失敗と承認プロンプトが復活する
+  - `excludedCommands` と事前 allow はコマンド文字列の照合で決まるため、必ずプロジェクトルートから**上記の 1 行をそのまま単独で**実行すること。以下はいずれも照合を外し、sandbox 内実行の失敗と承認プロンプトを復活させる
+    - 絶対パスにする / `./` の有無を変える / `bash` を `sh` に変える — パスは正規化されず、文字列が違えば別のコマンドとして扱われる
+    - `cd ... &&` を前置する、`&&` `;` `|` で他のコマンドと繋ぐ — 複合コマンドは区切り文字で分割され、**各サブコマンドが個別に**照合される。繋いだ相手が許可されていなければプロンプトが出る
+    - `> log 2>&1` などのリダイレクトを付ける — リダイレクト先の解決可否によってはプロンプトに倒れる
   - 「Operation not permitted」で失敗した場合は、まず呼び出しが上記の相対パス形式かを確認し、違っていれば形式を直して再実行する。相対パス形式でも失敗する場合のみ `excludedCommands` 未設定の古い配置と判断し、sandbox を無効化して再実行のうえ `settings.json` の更新をユーザーに案内すること
 - Codex では `workspace-write` が `.codex` / `.agents` を read-only にするため、配布済みの `.codex/rules/default.rules` が上記の正確なコマンドだけを sandbox 外で allow する
   - project が trusted でないと project-local rules 自体が読み込まれない。未信頼または rules 未配置で失敗した場合は迂回せず、project の信頼と配布ファイルを確認する
