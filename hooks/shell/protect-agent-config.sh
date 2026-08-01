@@ -1,7 +1,7 @@
 #!/bin/bash
 # PreToolUse(Bash|Edit|Write|NotebookEdit|apply_patch) hook: エージェント設定と skill を
 # 実行中のエージェント自身による改変から守る。
-# codex の workspace-write は .codex / .agents を read-only にするが、sandbox 無効化時にも
+# codex の distributed permission profile は .codex / .agents を read-only にするが、sandbox 無効化時にも
 # 同じ境界を維持するため、Claude/Codex の全設定ディレクトリを共通で検査する。
 # init-agent 等の設定用スクリプト実行は、コマンド文字列から内部の書き込み先を特定できないため
 # 本 hook の対象外。設定変更はレビュー済みスクリプトを sandbox 外で明示実行する。
