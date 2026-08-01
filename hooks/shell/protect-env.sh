@@ -1,12 +1,10 @@
 #!/bin/bash
 # PreToolUse(Bash|Edit|Write|NotebookEdit|apply_patch) hook: .env / .env.* への書き込み・削除を deny する。
-# 背景: claude では sandbox denyWrite(.env 系) が物理防壁だが、codex には per-path の
-#       書き込み拒否機構が無い。本 hook が両エージェント共通の防壁になる
-#       （claude では denyWrite との二重層。冗長な防御は害にならない）。
-# 対象パターンはテンプレートの契約として固定する（codex に denyWrite 相当の設定源が無いため）。
+# 背景: claude の sandbox denyWrite と codex の distributed permission profile は .env 系を
+#       read-only にする。本 hook は編集ツールと直接 Bash の両経路を拒否する共通の第二層になる。
+# 対象パターンは両エージェントで同じ契約になるようテンプレート側へ固定する。
 # 読み取り（cat / grep 等）は対象外。書き込み verb・リダイレクト・コピー先・sed -i のみ止める。
-# 限界: コマンド文字列検査のトリップワイヤ。迂回への最終防壁は claude では denyWrite、
-#       codex では削除系 rules(prompt) と人間のレビュー。
+# 限界: コマンド文字列検査のトリップワイヤ。迂回への最終防壁は sandbox / permission profile。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 TOOL=$(hook_tool_name)
