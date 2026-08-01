@@ -13,6 +13,9 @@ PASS=0; FAIL=0
 MIN_SUPPORTED_CODEX_VERSION="0.138.0"
 VERSION_COMPONENT_COUNT=3
 EXPECTED_DUAL_HOOK_BINDINGS=2
+LEGACY_PRODUCT_NAME="claude"
+LEGACY_HOOK_NAME="enforce-${LEGACY_PRODUCT_NAME}-commit"
+LEGACY_TEST_LABEL="${LEGACY_PRODUCT_NAME}-commit:"
 ok(){ PASS=$((PASS+1)); echo "ok   $1"; }
 ng(){ FAIL=$((FAIL+1)); echo "FAIL $1"; }
 version_at_least(){
@@ -326,7 +329,7 @@ command grep -rn "allowed-tools:.*Shell" "$REPO/skills" >/dev/null 2>&1 && ng "a
 command grep -rn "hookSpecificOutput" "$REPO/hooks/shell" 2>/dev/null | grep -v hook-io.sh | grep -q . && ng "hook-io 以外にスキーマ直書き" || ok "スキーマ直書きは hook-io のみ"
 command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md" 2>/dev/null | grep -q . && { ng "[claude] 直書き残存"; command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md"; } || ok "[claude] 直書きゼロ"
 find "$REPO/hooks" "$REPO/skills" "$REPO/rules" -type f -iname '*claude*' | grep -q . && { ng "共有ファイル名に製品名が残存"; find "$REPO/hooks" "$REPO/skills" "$REPO/rules" -type f -iname '*claude*'; } || ok "共有ファイル名は製品非依存"
-command grep -rn 'enforce-claude-commit\|claude-commit:' "$REPO" --exclude-dir=.git 2>/dev/null | grep -q . && ng "旧commit hook名が残存" || ok "旧commit hook名の残存なし"
+command grep -rnE "$LEGACY_HOOK_NAME|$LEGACY_TEST_LABEL" "$REPO" --exclude-dir=.git 2>/dev/null | grep -q . && ng "旧commit hook名が残存" || ok "旧commit hook名の残存なし"
 
 echo "== 7. 承認プロンプト回避の設定検査 =="
 # Claude Code の Bash 照合はコマンド文字列そのままで行われ、末尾 ` *` / `:*` は
