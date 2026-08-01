@@ -1,7 +1,7 @@
 # <repo>/.codex/rules/default.rules として配置する。
 # 可逆でも未コミット内容を失う操作は都度確認し、共有履歴を変える操作は拒否する。
 
-# workspace-write が保護する .codex / .agents へ書けるのは、宛先と処理を固定した
+# distributed permission profile が保護する .codex / .agents へ書けるのは、宛先と処理を固定した
 # レビュー済みスクリプトだけ。汎用の shell / cp / sed には例外を与えない。
 prefix_rule(
     pattern = ["bash", ".agents/skills/init-agent/init-agent.sh", "codex"],
@@ -27,6 +27,18 @@ prefix_rule(
     pattern = ["bash", ".agents/skills/rebase-squash/rebase-squash.sh"],
     decision = "prompt",
     justification = "未push履歴の変更計画とbackup作成条件を確認します。",
+)
+
+# 自動コミットは共有 hook が index とメッセージを検証することを前提に許可する。
+prefix_rule(
+    pattern = ["git", "add"],
+    decision = "allow",
+    justification = "共有hookが一括stageを拒否するため、対象ファイルの個別stageを許可します。",
+)
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "allow",
+    justification = "共有hookがstage件数・対象名・日本語メッセージを検証するため、契約準拠commitを許可します。",
 )
 
 prefix_rule(
@@ -90,7 +102,7 @@ prefix_rule(
     justification = "作業ツリーまたはindexへの影響を確認します。",
 )
 
-# 共有履歴への不可逆操作は claude 側の deny と同じく禁止
+# 共有履歴への不可逆操作は禁止。
 prefix_rule(
     pattern = ["git", "push"],
     decision = "forbidden",
