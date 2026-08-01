@@ -64,7 +64,7 @@ bash [skills_root]/run-agent/mark-prompt-done.sh <機能名>
     - `cd ... &&` を前置する、`&&` `;` `|` で他のコマンドと繋ぐ — 複合コマンドは区切り文字で分割され、**各サブコマンドが個別に**照合される。繋いだ相手が許可されていなければプロンプトが出る
     - `> log 2>&1` などのリダイレクトを付ける — リダイレクト先の解決可否によってはプロンプトに倒れる
   - 「Operation not permitted」で失敗した場合は、まず呼び出しが上記の相対パス形式かを確認し、違っていれば形式を直して再実行する。相対パス形式でも失敗する場合のみ `excludedCommands` 未設定の古い配置と判断し、sandbox を無効化して再実行のうえ `settings.json` の更新をユーザーに案内すること
-- Codex では `workspace-write` が `.codex` を保護し、`.codex/rules/default.rules` が `bash .agents/skills/run-agent/mark-prompt-done.sh` だけを sandbox 外で allow する。失敗時は迂回せず、project の信頼と rules 配置を確認すること
+- Codex では `distributed` permission profile が `.codex` を保護し、`.codex/rules/default.rules` が `bash .agents/skills/run-agent/mark-prompt-done.sh` だけを sandbox 外で allow する。失敗時は迂回せず、project の信頼と rules 配置を確認すること
 
 ### Step 5: 報告して停止する
 
