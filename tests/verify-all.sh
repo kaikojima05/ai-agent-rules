@@ -10,8 +10,35 @@ REPO="$(cd "$SUITE/.." && pwd)"
 S=$(mktemp -d "${TMPDIR:-/tmp}/ai-agent-rules-verify.XXXXXX") || { echo "temp dir を作れない" >&2; exit 1; }
 trap 'rm -rf "$S"' EXIT
 PASS=0; FAIL=0
+MIN_SUPPORTED_CODEX_VERSION="0.138.0"
+VERSION_COMPONENT_COUNT=3
+EXPECTED_DUAL_HOOK_BINDINGS=2
 ok(){ PASS=$((PASS+1)); echo "ok   $1"; }
 ng(){ FAIL=$((FAIL+1)); echo "FAIL $1"; }
+version_at_least(){
+  awk -v current="$1" -v minimum="$2" -v count="$VERSION_COMPONENT_COUNT" 'BEGIN {
+    split(current, c, "."); split(minimum, m, ".")
+    for (i = 1; i <= count; i++) {
+      if ((c[i] + 0) > (m[i] + 0)) exit 0
+      if ((c[i] + 0) < (m[i] + 0)) exit 1
+    }
+    exit 0
+  }'
+}
+mcp_tool_approved(){
+  awk -v header="[mcp_servers.$1.tools.$2]" '
+    $0 == header { getline; if ($0 == "approval_mode = \"approve\"") found = 1 }
+    END { exit !found }
+  ' "$3"
+}
+mcp_server_prompts_by_default(){
+  awk -v header="[mcp_servers.$1]" '
+    $0 == header { in_server = 1; next }
+    in_server && /^\[/ { exit !found }
+    in_server && $0 == "default_tools_approval_mode = \"prompt\"" { found = 1 }
+    END { exit !found }
+  ' "$2"
+}
 
 command -v jq >/dev/null 2>&1 || { echo "jq が必要" >&2; exit 1; }
 
@@ -156,11 +183,42 @@ else
   cat apply-e2e.out
 fi
 grep -q '^hooks = true$' .codex/config.toml && ok "config: hooks を明示有効化" || ng "config: hooks が未設定"
-grep -q '^network_access = false$' .codex/config.toml && ok "config: shell network を明示遮断" || ng "config: network 境界が未設定"
+grep -q '^default_permissions = "distributed"$' .codex/config.toml && ok "config: distributed permission profile を既定化" || ng "config: permission profile が未設定"
+grep -q '^extends = ":workspace"$' .codex/config.toml && ok "permissions: 通常ファイルは workspace write を継承" || ng "permissions: 通常書き込みが未設定"
+grep -q '^enabled = false$' .codex/config.toml && grep -q '^allow_local_binding = false$' .codex/config.toml && ok "permissions: localhost を含む network を遮断" || ng "permissions: network 境界が未設定"
+if grep -qE '^(sandbox_mode|\[sandbox_workspace_write\])' .codex/config.toml; then
+  ng "config: permission profile と旧 sandbox_mode が混在"
+else
+  ok "config: 旧 sandbox_mode との混在なし"
+fi
+for READ_PATH in '**/package.json' '**/.github/workflows/**' '**/migrations/**' '**/schema.prisma' '**/Dockerfile*' '**/docker-compose*' '**/*.tf' '**/yarn.lock' '**/package-lock.json' '**/pnpm-lock.yaml' '**/.env' '**/.env.*'; do
+  grep -Fq "\"$READ_PATH\" = \"read\"" .codex/config.toml && ok "permissions: $READ_PATH は read" || ng "permissions: $READ_PATH の保護漏れ"
+done
+if grep -q '@latest' .codex/config.toml || { grep 'git+https://' .codex/config.toml | grep -vqE '@[0-9a-f]{40}'; }; then
+  ng "config: MCP に未固定バージョンが残存"
+else
+  ok "config: MCP 起動バージョンを固定"
+fi
+grep -q 'chrome-devtools-mcp@[0-9]' .codex/config.toml && ok "config: Chrome MCP のversion固定" || ng "config: Chrome MCP が未固定"
+grep -q 'serena-agent==[0-9]' .codex/config.toml && ok "config: Serena MCP のversion固定" || ng "config: Serena MCP が未固定"
+for DISABLED_TOOL in replace_symbol_body replace_regex replace_content insert_after_symbol insert_before_symbol; do
+  grep -q "\"$DISABLED_TOOL\"" .codex/config.toml && ok "serena: $DISABLED_TOOL を無効化" || ng "serena: $DISABLED_TOOL の無効化漏れ"
+done
+for MCP_SERVER in serena chrome-devtools; do
+  mcp_server_prompts_by_default "$MCP_SERVER" .codex/config.toml && ok "$MCP_SERVER: 未登録toolはprompt" || ng "$MCP_SERVER: 未登録toolのprompt漏れ"
+  APPROVED_COUNT=0
+  while IFS= read -r MCP_TOOL; do
+    APPROVED_COUNT=$((APPROVED_COUNT+1))
+    mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: $MCP_TOOL を approve" || ng "$MCP_SERVER: $MCP_TOOL の approve 漏れ"
+  done < <(jq -r --arg prefix "mcp__${MCP_SERVER}__" '.permissions.allow[] | select(startswith($prefix)) | ltrimstr($prefix)' "$REPO/claude/settings.local.json")
+  CONFIGURED_COUNT=$(grep -c "^\[mcp_servers\.$MCP_SERVER\.tools\." .codex/config.toml)
+  [ "$CONFIGURED_COUNT" = "$APPROVED_COUNT" ] && ok "$MCP_SERVER: Claude allow 一覧だけ approve" || ng "$MCP_SERVER: 未登録toolのapprove混入"
+done
 [ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
 jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-agent-config.sh"))] | length' .codex/hooks.json)" = "2" ] && ok "設定保護hookを apply_patch/Bash に配線" || ng "設定保護hookの配線漏れ"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' .codex/hooks.json)" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "lockfile保護hookを apply_patch/Bash に配線" || ng "lockfile保護hookの配線漏れ"
 if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("guard-overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
   ok "未対応 ask hook を codex へ未配線"
 else
@@ -176,6 +234,12 @@ OUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash .
 
 echo "== 5.25 codex config / rules 実機検査 =="
 if command -v codex >/dev/null 2>&1; then
+  CODEX_VERSION=$(codex --version | awk '{print $2}')
+  if version_at_least "$CODEX_VERSION" "$MIN_SUPPORTED_CODEX_VERSION"; then
+    ok "codex $CODEX_VERSION は最低version $MIN_SUPPORTED_CODEX_VERSION 以上"
+  else
+    ng "codex $CODEX_VERSION は非対応（$MIN_SUPPORTED_CODEX_VERSION 以上が必要）"
+  fi
   mkdir -p "$S/codex-home"
   printf '[projects."%s"]\ntrust_level = "trusted"\n' "$PWD" > "$S/codex-home/config.toml"
   if printf '' | CODEX_HOME="$S/codex-home" codex -C "$PWD" app-server --strict-config --listen stdio:// > codex-config.out 2>&1; then
@@ -188,6 +252,10 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: rm を prompt" || ng "rules: rm 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git push origin main 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "forbidden" ] && ok "rules: git push を forbidden" || ng "rules: push 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git add src/example.ts 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: git add を allow" || ng "rules: git add 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git commit -m message 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: git commit を allow" || ng "rules: git commit 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git status --short 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: git status は未制限" || ng "rules: git status 誤検出 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- zsh -lc 'echo x > output.txt' 2>/dev/null)
@@ -243,6 +311,8 @@ PE2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patc
 [ "$(echo "$PE2" | bash $H/protect-env.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-env: .env.production も deny" || ng "protect-env: variant 素通し"
 PE3=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/env.ts\n+x\n*** End Patch"}}')
 [ -z "$(echo "$PE3" | bash $H/protect-env.sh)" ] && ok "protect-env: env.ts は棄権(誤爆なし)" || ng "protect-env: env.ts 誤爆"
+PL=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: yarn.lock\n+x\n*** End Patch"}}')
+[ "$(echo "$PL" | bash $H/protect-lockfiles.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-lockfiles: Codex apply_patch を deny" || ng "protect-lockfiles: Codex apply_patch 素通し"
 PAC=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .codex/config.toml\n+x\n*** End Patch"}}')
 [ "$(echo "$PAC" | bash $H/protect-agent-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-agent-config: .codex patch を deny" || ng "protect-agent-config: .codex patch 素通し"
 PAC2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .agents/skills/e2e/SKILL.md\n+x\n*** End Patch"}}')
@@ -255,6 +325,8 @@ echo "== 6. テンプレート残渣チェック =="
 command grep -rn "allowed-tools:.*Shell" "$REPO/skills" >/dev/null 2>&1 && ng "allowed-tools に Shell が残存" || ok "allowed-tools: Shell 残存なし"
 command grep -rn "hookSpecificOutput" "$REPO/hooks/shell" 2>/dev/null | grep -v hook-io.sh | grep -q . && ng "hook-io 以外にスキーマ直書き" || ok "スキーマ直書きは hook-io のみ"
 command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md" 2>/dev/null | grep -q . && { ng "[claude] 直書き残存"; command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md"; } || ok "[claude] 直書きゼロ"
+find "$REPO/hooks" "$REPO/skills" "$REPO/rules" -type f -iname '*claude*' | grep -q . && { ng "共有ファイル名に製品名が残存"; find "$REPO/hooks" "$REPO/skills" "$REPO/rules" -type f -iname '*claude*'; } || ok "共有ファイル名は製品非依存"
+command grep -rn 'enforce-claude-commit\|claude-commit:' "$REPO" --exclude-dir=.git 2>/dev/null | grep -q . && ng "旧commit hook名が残存" || ok "旧commit hook名の残存なし"
 
 echo "== 7. 承認プロンプト回避の設定検査 =="
 # Claude Code の Bash 照合はコマンド文字列そのままで行われ、末尾 ` *` / `:*` は
@@ -263,6 +335,9 @@ echo "== 7. 承認プロンプト回避の設定検査 =="
 SJ="$REPO/claude/settings.json"; SL="$REPO/claude/settings.local.json"
 jq -e . "$SJ" >/dev/null 2>&1 && ok "settings.json 構文" || ng "settings.json 構文"
 jq -e . "$SL" >/dev/null 2>&1 && ok "settings.local.json 構文" || ng "settings.local.json 構文"
+jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
+jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 MISS=0
 for SC in init-agent/init-agent.sh compose-prompt/apply-prompt.sh run-agent/mark-prompt-done.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
