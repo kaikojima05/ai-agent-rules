@@ -103,7 +103,7 @@ PLAN_BASE=$(jq -r '.base // empty' "$PLAN")
 NGROUPS=$(jq '.groups | length' "$PLAN")
 [ "$NGROUPS" -ge 1 ] || die "plan の groups が空"
 
-# 契約検証をスクリプトに内蔵する: enforce-claude-commit.sh はスクリプト内部の commit を
+# 契約検証をスクリプトに内蔵する: enforce-agent-commit.sh はスクリプト内部の commit を
 # 見られない(コマンド文字列検査のため)ので、同じ契約を同じ regex でここでも検査する
 while IFS= read -r subj; do
   echo "$subj" | grep -qE "^\[${AGENT_TAG}\]: [^[:space:]/]+(/[^[:space:]/]+)*/.+" || \
