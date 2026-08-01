@@ -6,7 +6,7 @@
 #       settings.local.json の ask ルール（人間の承認）に乗る。
 #       ※ かつては sandbox(denyWrite .git) が暗黙のゲートだったが、denyWrite を
 #         .git/hooks と .git/config に絞ったため、ask ルールが明示的なゲートを引き継いだ。
-# 役割分担: git commit --amend の deny は enforce-claude-commit.sh が担う。
+# 役割分担: git commit --amend の deny は enforce-agent-commit.sh が担う。
 #       git reset --hard は履歴書き換えではなく作業ツリー破壊なので対象外（ask 層が担う）。
 #       .git ディレクトリ自体を狙う破壊系コマンドの deny は protect-git-dir.sh が担う。
 # 本 hook はコマンド文字列検査のトリップワイヤであり、迂回への最終防壁は
