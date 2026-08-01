@@ -1,15 +1,31 @@
 # プロジェクト配布用設定。<repo>/.codex/config.toml として配置する。
 # trusted project でのみ読み込まれ、CLI / profile / user config より優先度は低い。
 # 可逆な workspace 内操作は自動化し、不可逆操作は rules の確認か hooks の拒否へ分離する。
-sandbox_mode = "workspace-write"
+default_permissions = "distributed"
 approval_policy = "on-request"
 
-[sandbox_workspace_write]
-# shell の outbound network は localhost を含めて遮断し、AGENTS.md の HTTP Request 規約どおり
-# 必要なリクエストだけ sandbox 外の承認へ送る。
-network_access = false
-# workspace-write は writable root 内でも .git / .codex / .agents を再帰的に read-only にする。
-# init-agent のような設定変更は、ユーザーが内容を確認して sandbox 外で明示実行する。
+[permissions.distributed]
+# 通常ファイルは workspace 既定の write を継承し、レビュー対象だけ read へ降格する。
+extends = ":workspace"
+
+[permissions.distributed.filesystem.":workspace_roots"]
+"**/package.json" = "read"
+"**/.github/workflows/**" = "read"
+"**/migrations/**" = "read"
+"**/schema.prisma" = "read"
+"**/Dockerfile*" = "read"
+"**/docker-compose*" = "read"
+"**/*.tf" = "read"
+"**/yarn.lock" = "read"
+"**/package-lock.json" = "read"
+"**/pnpm-lock.yaml" = "read"
+"**/.env" = "read"
+"**/.env.*" = "read"
+
+[permissions.distributed.network]
+# AGENTS.md の HTTP Request 規約に合わせ、localhost を含む通信を sandbox 外承認へ送る。
+enabled = false
+allow_local_binding = false
 
 [features]
 # 現行 Codex では既定で有効だが、配布設定が hooks.json を前提とすることを明示する。
@@ -17,15 +33,99 @@ hooks = true
 
 [mcp_servers.chrome-devtools]
 command = "npx"
-args = ["-y", "chrome-devtools-mcp@latest"]
+args = ["-y", "chrome-devtools-mcp@1.6.0"]
 startup_timeout_sec = 20
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.chrome-devtools.tools.new_page]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.take_snapshot]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.take_screenshot]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.click]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.navigate]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.evaluate_script]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.upload_file]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.wait_for]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.list_console_messages]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.list_pages]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.list_network_requests]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.fill]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.fill_form]
+approval_mode = "approve"
+
+[mcp_servers.chrome-devtools.tools.navigate_page]
+approval_mode = "approve"
 
 [mcp_servers.serena]
 command = "uvx"
 args = [
-  "--from", "git+https://github.com/oraios/serena",
+  "--from", "serena-agent==1.5.3",
   "serena", "start-mcp-server",
   "--context", "codex",
   "--project-from-cwd",
 ]
 startup_timeout_sec = 30
+default_tools_approval_mode = "prompt"
+disabled_tools = [
+  "replace_symbol_body",
+  "replace_regex",
+  "replace_content",
+  "insert_after_symbol",
+  "insert_before_symbol",
+]
+
+[mcp_servers.serena.tools.check_onboarding_performed]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.onboarding]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.list_dir]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.find_file]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.list_memories]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.write_memory]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.read_memory]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.find_symbol]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.get_symbols_overview]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.search_for_pattern]
+approval_mode = "approve"
+
+[mcp_servers.serena.tools.initial_instructions]
+approval_mode = "approve"
