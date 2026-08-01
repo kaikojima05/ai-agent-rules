@@ -26,7 +26,11 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/enforce-claude-commit.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/protect-lockfiles.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/enforce-agent-commit.sh"
           }
         ]
       },
@@ -49,6 +53,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/protect-env.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/protect-lockfiles.sh"
           }
         ]
       }
@@ -56,7 +64,8 @@
   },
   "sandbox": {
     "enabled": true,
-    "autoAllowBashIfSandboxed": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": false,
     "excludedCommands": [
       "bash .claude/skills/init-agent/init-agent.sh",
       "bash .claude/skills/init-agent/init-agent.sh *",
@@ -71,8 +80,8 @@
       "denyWrite": [".git/hooks", ".git/config", ".env", ".env.*", ".claude"]
     },
     "network": {
-      "allowLocalBinding": true,
-      "allowedDomains": ["localhost"]
+      "allowLocalBinding": false,
+      "allowedDomains": []
     }
   }
 }
