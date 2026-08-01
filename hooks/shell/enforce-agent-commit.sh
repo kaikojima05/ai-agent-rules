@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse(Bash) hook: git add / git commit をコミット契約に適合する形だけ通す。
+# PreToolUse(Bash) hook: Git のコミット操作をリポジトリ共通の契約に適合する形だけ通す。
 # 契約: 1 ファイル = 1 コミット / メッセージは「[<エージェント名>]: {対象ファイル名}/{変更内容(日本語)}」/
 #       タグのエージェント名は hook-io.sh の HOOK_AGENT（init-agent が確定させた値）を使う。
 #       author は常にユーザー本人の git config identity（AI を author・co-author に混ぜない）。
@@ -16,9 +16,18 @@ exec 2>/dev/null
 CMD=$(hook_command)
 [ -z "$CMD" ] && exit 0
 
+EXPECTED_STAGED_FILE_COUNT=1
+JAPANESE_TEXT_RE='[ぁ-んァ-ヶ一-龠々ー]'
+
 # フラグ検査はクォート内(コミットメッセージ本文)を除去してから行う。
 # メッセージ内の文字列(例:「-a オプションの説明」)をフラグと誤認しないため
 MASKED=$(echo "$CMD" | sed 's/"[^"]*"//g' | sed "s/'[^']*'//g")
+
+# rules / settings の禁止設定が欠けても共有履歴を変更できないよう、通常形も hook で拒否する。
+echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+push([[:space:]]|$)' && \
+  hook_deny "git push は禁止です。変更内容を確認したユーザー本人が実行してください。"
+echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+cherry-pick([[:space:]]|$)' && \
+  hook_deny "git cherry-pick は禁止です。履歴の取り込みはユーザー本人が実行してください。"
 
 if echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+commit'; then
   # AI をコミット identity に混ぜる要素は禁止（AI 作業の表明はメッセージ先頭のタグだけ）
@@ -31,9 +40,27 @@ if echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+commit'; then
   # 1 ファイル = 1 コミット: 変更全部を巻き込む一括コミットは禁止
   echo "$MASKED" | grep -qE 'git[[:space:]]+commit[^;&|]*[[:space:]](-a[m]?|--all)([[:space:]]|$)' && \
     hook_deny "-a / --all でのコミットは禁止です。1 ファイル = 1 コミットの契約に従い、対象ファイルだけを git add してからコミットしてください。"
-  # メッセージ形式契約: 「[<エージェント名>]: {対象ファイル名}/{変更内容}」（本文はクォート内のため RAW を検査）
-  echo "$CMD" | grep -qE "\[$HOOK_AGENT\]: [^[:space:]/]+(/[^[:space:]/]+)*/." || \
-    hook_deny "コミットメッセージは「[$HOOK_AGENT]: {対象ファイル名}/{変更内容(日本語)}」の形式で書いてください。例: [$HOOK_AGENT]: require-test.sh/tsx を対象外にした理由をコメントに明記した"
+  # commit 直前の index を正として検査し、別コマンドで複数 stage 済みの状態も拒否する。
+  mapfile -d '' -t STAGED_FILES < <(git diff --cached --name-only -z)
+  STAGED_FILE_COUNT=${#STAGED_FILES[@]}
+  [ "$STAGED_FILE_COUNT" -eq "$EXPECTED_STAGED_FILE_COUNT" ] || \
+    hook_deny "コミット直前に stage 済みのファイルが $STAGED_FILE_COUNT 件あります。1 ファイル = 1 コミットの契約に従い、厳密に1件だけ stage してください。"
+
+  STAGED_FILE=${STAGED_FILES[0]}
+  STAGED_BASENAME=${STAGED_FILE##*/}
+  COMMIT_MESSAGE=$(printf '%s\n' "$CMD" | sed -nE 's/.*(-m|--message)[[:space:]]+"([^"]*)".*/\2/p')
+  [ -n "$COMMIT_MESSAGE" ] || \
+    COMMIT_MESSAGE=$(printf '%s\n' "$CMD" | sed -nE "s/.*(-m|--message)[[:space:]]+'([^']*)'.*/\\2/p")
+  [ -n "$COMMIT_MESSAGE" ] || \
+    hook_deny "コミットメッセージを検証できません。-m または --message とクォートしたメッセージを指定してください。"
+
+  MESSAGE_PREFIX="[$HOOK_AGENT]: $STAGED_BASENAME/"
+  case "$COMMIT_MESSAGE" in
+    "$MESSAGE_PREFIX"*) CHANGE_DESCRIPTION=${COMMIT_MESSAGE#"$MESSAGE_PREFIX"} ;;
+    *) hook_deny "コミットメッセージの対象ファイル名を stage 済みの $STAGED_BASENAME と一致させてください。形式: [$HOOK_AGENT]: $STAGED_BASENAME/{変更内容(日本語)}" ;;
+  esac
+  [ -n "$CHANGE_DESCRIPTION" ] && printf '%s\n' "$CHANGE_DESCRIPTION" | grep -qE "$JAPANESE_TEXT_RE" || \
+    hook_deny "コミットメッセージの変更内容には日本語を含めてください。形式: [$HOOK_AGENT]: $STAGED_BASENAME/{変更内容(日本語)}"
 fi
 
 # 一括ステージングも 1 ファイル = 1 コミットの契約違反
