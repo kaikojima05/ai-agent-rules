@@ -44,7 +44,7 @@ ai-agent-rules/
 
 ### Codex への配置
 
-Codex は次の対応を崩さずに配置する。共通の Markdown 規約と execpolicy は、拡張子が異なるため `.codex/rules/` で共存できる。
+Codex 0.138.0 以上を前提とする。次の対応を崩さずに配置する。共通の Markdown 規約と execpolicy は、拡張子が異なるため `.codex/rules/` で共存できる。
 
 | 配布元 | 配置先 |
 |---|---|
@@ -83,7 +83,7 @@ $init-agent codex
 - 本リポジトリはテンプレートなので、`init-agent` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - placeholder の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れは grep で確認する。
 - Claude Code は `AGENTS.md` を自動読み込みしない（`CLAUDE.md` のみ）。そのため `claude/CLAUDE.md`（中身は `@AGENTS.md`）を配置時にプロジェクトルートへ展開して読ませる。codex は `AGENTS.md` を直読みするため不要。
-- Codex の `workspace-write` は `.git` / `.codex` / `.agents` を再帰的にread-onlyにする。設定更新は配布rulesが限定allowする固定スクリプトだけを使い、汎用の `cp` / `sed` に例外を与えない。
+- Codex は `distributed` permission profile で通常の workspace 書き込みを許可し、`.git` / `.codex` / `.agents` とレビュー対象パスを保護する。設定更新は配布rulesが限定allowする固定スクリプトだけを使い、汎用の `cp` / `sed` に例外を与えない。
 - Codex の hook は**配置しただけでは実行されない**。`/hooks` で現在の定義をレビューして信頼すること。未信頼のhookはスキップされる（検証用の一時迂回フラグは `--dangerously-bypass-hook-trust`）。
 
 ## 承認の挙動
@@ -94,34 +94,37 @@ $init-agent codex
 |---|---|
 | ファイルを読む・探す（`ls` `cat` `grep`） | ✅ 自動 |
 | 通常ファイルを書き換える（コード・テスト・ドキュメント） | ✅ 自動 |
+| `package.json` / CI / migration / Prisma / Docker / Terraform を書き換える | 🙋 確認 |
 | ファイルを消す（`rm`）・シェルで上書きする（`sed -i` 等） | 🙋 確認 |
-| 外部のサーバーにデータを送る | 🙋 確認 |
-| 契約に従うコミット（`[<エージェント名>]: {ファイル名}/{内容}`・1 ファイル単位） | ✅ 自動 |
+| localhost を含むサーバーへ HTTP request を送る | 🙋 sandbox 外で確認 |
+| 契約に従うコミット（stage 1件・対象名一致・日本語の変更内容） | ✅ 自動 |
 | `tdd-run` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
-| `.env` / `.git/` / エージェント設定を直接書き換える | 🚫 禁止 |
-| 契約に反するコミット（prefix 無し・`-a` 一括・AI 署名・`--amend`） | 🚫 禁止 |
-| `git push`、依存の install / add | 🚫 禁止 |
+| `.env` / lockfile / `.git/` / エージェント設定を直接書き換える | 🚫 禁止 |
+| 契約に反するコミット（複数stage・対象名不一致・日本語なし・AI署名・`--amend`） | 🚫 禁止 |
+| `git push` / `git cherry-pick`、依存の install / add | 🚫 禁止 |
 
 エージェント実装上の差分:
 
 | 操作 | Claude Code | Codex |
 |---|---|---|
-| localhost へのHTTP request | sandbox内で自動 | shell network遮断のためsandbox外承認 |
-| `package.json` / CI / migration 等のpath単位確認 | settingsのaskで強制 | 現行PreToolUseはask未対応。AGENTS規約とレビューで扱う |
+| localhost を含むHTTP request | sandbox外承認 | permission profileのnetwork無効化によりsandbox外承認 |
+| `package.json` / CI / migration 等のpath単位確認 | settingsのaskで強制 | permission profileでreadへ降格し書き込み時に承認 |
 | 既存ファイルの全面Write | `guard-overwrite.sh`でask | `apply_patch`は部分差分。opaque shellはrulesでprompt |
 | 設定・skillの更新 | sandbox除外済み固定スクリプト | rulesでallowした固定スクリプト |
+| MCPの未登録tool | Claudeの既定確認 | `default_tools_approval_mode = "prompt"` |
 
 挙動を決めている実体（想定外の動きをしたらここを見る）:
 
 - 許可 / 確認 / 禁止の名簿（コマンドと書き込みパスのリスク分類） → `claude/settings.local.json`
-- Codex のsandbox / network / hook有効化 → `codex/config.toml`
+- Codex のpermission profile / network / MCP承認 / hook有効化 → `codex/config.toml`
 - Codex のコマンド単位の許可 / 確認 / 禁止 → `codex/rules/default.rules`
 - Codex のhookイベントと実行timeout → `codex/hooks.json`
 - テストの有無でコード書き込みを判定（`tdd-run` 稼働中のみ deny） → `hooks/shell/require-test.sh`（claude: tdd-run の frontmatter hooks で起動 / codex: 常時配線 + `skill-session.sh` の marker で tdd-run 稼働中のみ執行）
 - 復元できない全上書きだけ確認に通す（Claude Code） → `hooks/shell/guard-overwrite.sh`
 - `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-agent-config.sh`
-- 機密ファイル（`.env` / `.env.*`）の書き込み・削除の封じ込め → `hooks/shell/protect-env.sh`（claude は denyWrite との二重層、codex では唯一の per-path 防壁）
-- コミット契約（`[<エージェント名>]:` 形式・1 ファイル単位・AI 署名禁止）の執行 → `hooks/shell/enforce-claude-commit.sh`
+- 機密ファイル（`.env` / `.env.*`）の書き込み・削除の封じ込め → `hooks/shell/protect-env.sh`（sandbox / permission profile との二重層）
+- lockfile の編集ツール・Bash直接変更を拒否 → `hooks/shell/protect-lockfiles.sh`（permission設定との二重層）
+- コミット契約（stage厳密1件・対象ファイル名一致・日本語・AI署名禁止）の執行 → `hooks/shell/enforce-agent-commit.sh`
 
 ## テスト
 
@@ -133,6 +136,6 @@ bash tests/verify-all.sh
 
 - `tests/verify-all.sh` — 統合スイート。一時ディレクトリに claude / codex の配置を再現し、`init-agent` の placeholder 置換・`[NOTE]` 解決を実行したうえで全 hook を検証する。最後に `PASS=n FAIL=0` を出す
 - `tests/run-tests.sh` — hook 全数の deny / ask / 棄権テスト（`verify-all.sh` から呼ばれる。単体では動かない）
-- 検証範囲: 構文 / 実行ビット / 配置シミュレーション（claude・codex）/ Codex config strict読込 / execpolicy判定 / hook参照先・timeout / placeholder置換漏れ / hook決定JSON / `skill-session`の発火スコープ / 固定宛先スクリプト / `rebase-squash` E2E
-- 前提: `jq` と `git`。Codex CLI があれば config / rules の実機検査も実行し、無い環境ではその部分だけskipする
+- 検証範囲: 構文 / 実行ビット / 配置シミュレーション（claude・codex）/ 権限パスマトリクス / MCP version・tool承認 / Codex config strict読込 / execpolicy判定 / commit契約 / hook参照先・timeout / placeholder置換漏れ / hook決定JSON / `skill-session`の発火スコープ / 固定宛先スクリプト / `rebase-squash` E2E
+- 前提: `jq` と `git`。Codex CLI があれば 0.138.0 以上であることと config / rules の実機検査を行い、無い環境ではその部分だけskipする
 - 作業ファイルは一時ディレクトリに作られ、終了時に削除される。`tests/` 自体は配布対象外
