@@ -53,14 +53,15 @@ hooks:
 
 - **Claude Code**: 有効な settings（CLI > local > project > user の合成結果）で
   1. `sandbox.enabled` が `true`
-  2. `sandbox.filesystem.denyWrite` に保護対象が登録されている（リポジトリなら最低限 `.git`。
+  2. `sandbox.failIfUnavailable` が `true`
+  3. `sandbox.filesystem.denyWrite` に保護対象が登録されている（リポジトリなら最低限 `.git`。
      プロジェクト固有の機密・生成物があればそれも含まれているか）
-- **codex**: `sandbox_mode` が `danger-full-access` でない（`workspace-write` を推奨）。
+- **codex**: `default_permissions` が `distributed` で、通常ファイル以外の保護対象が `read` 以下に制限されている。
   加えて `.codex/hooks.json` の hook が信頼登録済みであること（未信頼だと prototype-guard が黙って効かない）
 
 **満たさなければ本スキルを起動せず中止し、理由を伝える。**
 Why: sandbox 無しで Bash 自由化を使うと、保護パス（`.git` 等）が rm で物理的に消せてしまい
-復旧不能になる。物理防壁（Claude Code は denyWrite、codex は workspace 境界 + hook 群）が本スキルの安全性の土台。
+復旧不能になる。物理防壁（Claude Code は denyWrite、codex は permission profile + hook 群）が本スキルの安全性の土台。
 **保護対象はプロジェクトごとに異なるため、本スキルは特定パスを前提にせず配置済みの防壁設定を尊重する。**
 
 ## テスト禁止
@@ -73,16 +74,16 @@ Why: sandbox 無しで Bash 自由化を使うと、保護パス（`.git` 等）
 
 | 操作 | 扱い | 担当 |
 |---|---|---|
-| コード本体の編集・新規作成 | 承認なしで許可（テスト不要） | claude: settings の allow `Edit(**)` / `Write(**)` ・ codex: sandbox workspace-write |
+| コード本体の編集・新規作成 | 承認なしで許可（テスト不要） | claude: settings の allow `Edit(**)` / `Write(**)` ・ codex: `distributed` profile の workspace write継承 |
 | `*.test.*` の作成・編集 | **deny** | `prototype-guard.sh`（codex は `$prototype` 起動の skill-session marker で有効化） |
-| sandbox 内で完結する Bash（read-only / ビルド等） | 承認なしで許可 | claude: `autoAllowBashIfSandboxed` ・ codex: sandbox workspace-write |
+| sandbox 内で完結する Bash（read-only / ビルド等） | allow 一覧に一致するものだけ承認なし | claude: settings の明示 `Bash(...)` allow ・ codex: `distributed` profile の workspace write継承 |
 | rm / mv / sed -i 等の削除・上書き系 Bash | 都度確認 | claude: settings の ask ルール ・ codex: `.codex/rules` の prompt |
-| 保護パス（`.git` / `.env` 等）の改変・削除 | 物理拒否 | claude: sandbox `denyWrite`（+ hook 二重層） ・ codex: `protect-git-dir.sh` / `protect-env.sh` |
+| 保護パス（`.git` / `.env` / lockfile 等）の改変・削除 | 物理拒否 | claude: sandbox `denyWrite`（+ hook） ・ codex: permission profile（+ hook） |
 | プロジェクト外への書き込み・削除 | 物理拒否 | claude: sandbox CWD 境界 ・ codex: workspace 境界 |
 
 ## フロー
 
-1. **Step 0**: 前提条件（sandbox + denyWrite）を確認。満たさなければ中止
+1. **Step 0**: 前提条件（fail-closed sandbox / permission profile + 保護hook）を確認。満たさなければ中止
 2. 要件を確定する（「## 呼び出しと引数」に従う）
    - 引数なし → 対話で要件を絞る（何を検証したいプロトタイプか）
    - `from-prompt` → index と設計書一式を読み取り、要約を報告して次へ
