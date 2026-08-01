@@ -51,6 +51,11 @@
             "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-env.sh\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-lockfiles.sh\"",
+            "timeout": 5
           }
         ]
       },
@@ -89,7 +94,12 @@
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/enforce-claude-commit.sh\"",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-lockfiles.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/enforce-agent-commit.sh\"",
             "timeout": 5
           }
         ]
