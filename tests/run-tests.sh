@@ -58,11 +58,26 @@ check "registry-fetch: npx は deny"           deny  deny-registry-fetch.sh '{"t
 check "registry-fetch: npm install は deny"   deny  deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"npm install left-pad"}}'
 check "registry-fetch: yarn build は棄権"     empty deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"yarn build"}}'
 
-# --- enforce-claude-commit ---
-check "claude-commit: git add -A は deny"     deny  enforce-claude-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git add -A"}}'
-check "claude-commit: 契約形式コミットは棄権" empty enforce-claude-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
-check "claude-commit: 形式違反は deny"        deny  enforce-claude-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix bug\""}}'
-check "claude-commit: amend は deny"          deny  enforce-claude-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit --amend -m \"[claude]: a/b\""}}'
+# --- enforce-agent-commit ---
+check "agent-commit: git add -A は deny"       deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git add -A"}}'
+check "agent-commit: plain push は deny"       deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}'
+check "agent-commit: cherry-pick は deny"      deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git cherry-pick abc123"}}'
+mkdir -p commit-fixture
+cd commit-fixture
+git init -q
+git config user.email tester@example.com
+git config user.name tester
+printf 'foo\n' > foo.ts
+git add foo.ts
+check "agent-commit: 契約形式コミットは棄権" empty enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
+check "agent-commit: ファイル名不一致は deny" deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: bar.ts/バグを直した\""}}'
+check "agent-commit: 英語だけの変更内容は deny" deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/fix bug\""}}'
+check "agent-commit: 形式違反は deny"          deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix bug\""}}'
+check "agent-commit: amend は deny"            deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit --amend -m \"[claude]: foo.ts/修正した\""}}'
+printf 'bar\n' > bar.ts
+git add bar.ts
+check "agent-commit: 複数stageは deny"          deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
+cd ..
 
 # --- guard-overwrite ---
 echo x > untracked.txt
@@ -80,6 +95,11 @@ check "protect-env: Edit env.ts は棄権"       empty protect-env.sh '{"tool_na
 check "protect-env: rm .env は deny"          deny  protect-env.sh '{"tool_name":"Bash","tool_input":{"command":"rm .env"}}'
 check "protect-env: リダイレクト書き込みは deny" deny protect-env.sh '{"tool_name":"Bash","tool_input":{"command":"echo A=1 > .env"}}'
 check "protect-env: cat .env は棄権"          empty protect-env.sh '{"tool_name":"Bash","tool_input":{"command":"cat .env"}}'
+
+# --- protect-lockfiles ---
+check "protect-lockfiles: Edit yarn.lock は deny" deny protect-lockfiles.sh '{"tool_name":"Edit","tool_input":{"file_path":"yarn.lock"}}'
+check "protect-lockfiles: Bash 上書きは deny" deny protect-lockfiles.sh '{"tool_name":"Bash","tool_input":{"command":"echo x > package-lock.json"}}'
+check "protect-lockfiles: 読み取りは棄権" empty protect-lockfiles.sh '{"tool_name":"Bash","tool_input":{"command":"cat pnpm-lock.yaml"}}'
 
 # --- hook-io フェイルクローズ(未実装エージェント = claude/codex 以外) ---
 # 契約: exit 1 は PreToolUse で non-blocking error 扱い = fail-open になるため、
