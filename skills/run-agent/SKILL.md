@@ -1,81 +1,100 @@
 ---
 name: run-agent
-description: "@.[agent_name]/prompt/ の設計書を実装順に 1 枚だけ実装する"
+description: "@.[agent_name]/prompt/ の承認済み設計書を1枚選び、Codex主導・DeepSeek実装担当のTDDフローで完了させる"
 allowed-tools: Read, Bash
 disable-model-invocation: true
 ---
 
 ## 目的
 
-compose-prompt が作った設計書のうち、**未実装のものを 1 枚だけ**実装する。
-「@.[agent_name]/prompt/.prompt.md の内容を実行する」の定型文を省略する。
+Codexを唯一のオーケストレーターとして、未実装の設計書を1枚だけ完了する。DeepSeekには調査または許可済み本体コードの候補パッチ作成だけを委任する。
 
-## 前提: 成果物の構成
+## 前提
 
-compose-prompt が `.[agent_name]/prompt/` に次を置いている（形式の詳細は compose-prompt スキルを参照）:
+`compose-prompt`が次を配置済みで、ユーザーの本スキル呼び出しを実行指示として扱う。
 
 | ファイル | 役割 |
 |---|---|
-| `.prompt.md` | 実装順の index。`- [ ] branch-<機能名>-prompt.md` を実装順に並べたもの |
-| `branch-<機能名>-prompt.md` | 機能 1 つ分の設計書（Summary / Changes / 対象ファイル / 参照ルール / 完了条件） |
+| `.prompt.md` | `- [ ] branch-<機能名>-prompt.md`形式の実装順index |
+| `branch-<機能名>-prompt.md` | ユーザー承認済みの設計書 |
 
 ## 実行フロー
 
-### Step 1: スキルを呼び出す
+### 1. 対象を1枚だけ選ぶ
 
-スキルは引数なし
+`@.[agent_name]/prompt/.prompt.md`の最初の`- [ ]`を選ぶ。飛ばしたり順序を再判断したりしない。
 
-```
-/run-agent
-```
+- 未実装がなければ、全設計書が完了済みと報告して終了する
+- indexがない、空、参照先がない場合は終了する
+- 他の設計書は読まない
 
-### Step 2: 実装する設計書を 1 枚特定する
+### 2. 変更範囲を確定する
 
-`@.[agent_name]/prompt/.prompt.md` を読み、**最初の `- [ ]`（未実装）の行**を対象とする。
+設計書の対象ファイルを、テスト資産と本体コードへ分類する。DeepSeekへ渡せるのは本体コードだけである。次はCodex管理のため委任しない。
 
-- `- [ ]` が 1 つも無ければ「全設計書が実装済み」と報告して終了する。次のタスクは compose-prompt からやり直す
-- `.prompt.md` が存在しない・空の場合は、その旨を伝えて compose-prompt の実行を案内し終了する
-- **飛ばさない・選ばない。** 並び順は compose-prompt が依存関係を考慮して決めた実装順であり、エージェントが順序を判断し直してはならない
+- test/spec、fixture、factory、mock、stub、fake、snapshot
+- Markdown、AGENTS.md、スキル、エージェント設定
+- package、lockfile、CI、migration、schema、環境設定
+- Git管理ファイル
 
-### Step 3: 設計書 1 枚を実装する
+対象本体コードに未コミット変更があれば、ユーザー変更との衝突として停止する。
 
-特定した `@.[agent_name]/prompt/branch-<機能名>-prompt.md` だけを読んで実装する。
+### 3. tdd-runをフル実行する
 
-- **他の設計書は読まない・実装しない**
-- コード実装を伴う場合は、直接書かず **tdd-run スキルのフルフロー**（シナリオ → Red → Green → Refactor）で進める
-- 調査・ドキュメントなど実装を伴わないタスクは通常通り実行する
-- コミットは AGENTS.md「Git 運用」のとおり 1 ファイル = 1 コミットで積む
-- 設計書末尾の完了条件を満たすまでを 1 枚の範囲とする
+コード変更を伴う場合は`tdd-run`へ従う。
 
-### Step 4: 実装済みとして index に記録する
+1. Codexがテストシナリオを提案し、ユーザーの一括承認を得る
+2. Codexがテストを書き、ファイル単位で即コミットする
+3. CodexがRedを確認する
+4. 固定実行器でDeepSeekへ本体コードを委任する
+5. Codexが候補パッチを検証し、1ファイルずつ反映・即コミットする
+6. CodexがGreen、レビュー、必要な本体コード修正を完了する
 
-完了条件を満たしたら、専用スクリプトで index のチェックボックスを `[x]` に倒す。
+調査・ドキュメントだけの設計書はCodexが通常どおり実行し、DeepSeek実装を呼ばない。
 
-```
+### 4. DeepSeekの相談を処理する
+
+DeepSeekはテストの穴をCodexへ相談できるが、テスト・設計を変更できない。Codexが検証し、既存の承認内容で一意に解決できなければ、次へ進まずユーザーへ新しいシナリオまたは設計変更を提示する。
+
+相談を解決して再委任するときは、結果ディレクトリの衝突を避けるため新しいtask-idを使う。
+
+### 5. 完了を検証する
+
+設計書の完了条件、対象・回帰テスト、型検査、lint、レビュー、ファイル単位コミットを確認する。DeepSeekの自己申告だけで完了扱いしない。
+
+### 6. indexを完了へ変更する
+
+すべて満たした後だけ固定スクリプトを実行する。
+
+```bash
 bash [skills_root]/run-agent/mark-prompt-done.sh <機能名>
 ```
 
-- `<機能名>` は `branch-` と `-prompt.md` を除いた部分（例: `branch-user-address-api-prompt.md` → `user-address-api`）
-- `.[agent_name]/` は sandbox の denyWrite で保護されておりエージェントは直接書き込めないため、進捗の記録もこの固定スクリプトに閉じ込める。本スクリプトは対象 1 行のチェックボックスを倒すことしかできず、任意の内容の書き込みもファイルの削除もできない
-- 対象が既に `[x]` だった場合はエラーで止まる。**握りつぶして次へ進まない** — 実装対象を取り違えた証拠なので、報告して止まること
-- Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る
-  - `excludedCommands` と事前 allow はコマンド文字列の照合で決まるため、必ずプロジェクトルートから**上記の 1 行をそのまま単独で**実行すること。以下はいずれも照合を外し、sandbox 内実行の失敗と承認プロンプトを復活させる
-    - 絶対パスにする / `./` の有無を変える / `bash` を `sh` に変える — パスは正規化されず、文字列が違えば別のコマンドとして扱われる
-    - `cd ... &&` を前置する、`&&` `;` `|` で他のコマンドと繋ぐ — 複合コマンドは区切り文字で分割され、**各サブコマンドが個別に**照合される。繋いだ相手が許可されていなければプロンプトが出る
-    - `> log 2>&1` などのリダイレクトを付ける — リダイレクト先の解決可否によってはプロンプトに倒れる
-  - 「Operation not permitted」で失敗した場合は、まず呼び出しが上記の相対パス形式かを確認し、違っていれば形式を直して再実行する。相対パス形式でも失敗する場合のみ `excludedCommands` 未設定の古い配置と判断し、sandbox を無効化して再実行のうえ `settings.json` の更新をユーザーに案内すること
-- Codex では `distributed` permission profile が `.codex` を保護し、`.codex/rules/default.rules` が `bash .agents/skills/run-agent/mark-prompt-done.sh` だけを sandbox 外で allow する。失敗時は迂回せず、project の信頼と rules 配置を確認すること
+`<機能名>`は`branch-`と`-prompt.md`を除いた部分とする。既に`[x]`なら対象取り違えとして停止する。スクリプトのパスや呼び出し形式を変えず、複合コマンドにしない。
 
-### Step 5: 報告して停止する
+Codexでは`.codex/rules/default.rules`がこの固定コマンドだけをsandbox外で許可する。失敗したら迂回せず、project trustとrules配置を確認する。
 
-**設計書 1 枚を終えたら必ずそこで止まる。** 次の `- [ ]` に自動で進んではならない。
+### 7. 報告して停止する
 
-報告すること:
+次を報告し、次の設計書へ自動で進まない。
 
-- 実装した設計書と、その機能名
+- 実装した設計書と機能名
+- 承認されたテストシナリオ
+- DeepSeekのtask-id、相談、候補パッチの採否
+- Red、Green、回帰確認
 - 積んだコミット
-- index の残件数（`mark-prompt-done.sh` が `remaining:` として出力する）
+- indexの残件数
 
-- Why: 設計書 1 枚 = 1 ブランチ = 1 PR の単位。次の 1 枚に進む前に、人間がレビューし、必要ならブランチを切り替える余地を残す
-- Why: 全設計書を連続実装すると、1 枚目の設計が誤っていた場合に後続すべてが巻き添えになる。1 枚ごとに止めれば、誤りが判明した時点の損害が 1 枚分で収まる
-- 続きを実装するときは、ユーザーが改めて `/run-agent` を呼ぶ
+設計書1枚を1ブランチ・1PRの単位とし、続きはユーザーが改めて`/run-agent`を呼ぶ。
+
+## DeepSeek固定実行器
+
+```bash
+# 読み取り専用調査
+bash [skills_root]/run-agent/delegate-deepseek.sh research <task-id> <設計書>
+
+# 隔離worktreeで本体コードだけ実装
+bash [skills_root]/run-agent/delegate-deepseek.sh implement <task-id> <設計書> <許可する本体コード>...
+```
+
+実行器はOpenRouterの月次使用量38 USDで停止し、API keyに40 USD以下の月次hard limitがあることを検証する。ZDRと`data_collection: deny`をリクエストでも強制し、OpenCodeの外部プラグインを無効化する。
