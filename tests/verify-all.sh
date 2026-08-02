@@ -58,6 +58,8 @@ done
 DS="$REPO/skills/run-agent/delegate-deepseek.sh"
 [ -x "$DS" ] && ok "exec bit: delegate-deepseek.sh" || ng "exec bit 無し: delegate-deepseek.sh"
 grep -q 'SOFT_BUDGET_USD="38"' "$DS" && grep -q 'HARD_BUDGET_USD="40"' "$DS" && ok "DeepSeek予算: soft=38 hard=40" || ng "DeepSeek予算が不正"
+grep -q 'MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"' "$DS" && ok "DeepSeekモデル: V4 Flash latestを追従" || ng "DeepSeekモデルがlatest追従ではない"
+grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q '"reasoningEffort":env.MODEL_VARIANT' "$DS" && grep -q -- '--variant "$MODEL_VARIANT"' "$DS" && ok "DeepSeek effort: highを明示" || ng "DeepSeek effortがhigh固定ではない"
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
 
