@@ -96,7 +96,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 
 次の場合は正常な自動区間を停止する。
 
-- OpenRouterの月次使用量が38 USD以上、またはAPI keyの上限が40 USD超
+- OpenRouterの対象期間使用量が38 USD以上、またはAPI keyの上限が40 USD超
 - ZDR対応エンドポイントが利用できない
 - OpenCode、API key、依存コマンドがない
 - DeepSeekが許可外パスを変更した
