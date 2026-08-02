@@ -69,13 +69,19 @@ printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\nfail\n' "$OPENR
 KEY_INFO=$(curl --config "$CURL_CONFIG" "$OPENROUTER_KEY_ENDPOINT") || fail "cannot read OpenRouter key usage"
 USAGE_MONTHLY=$(printf '%s' "$KEY_INFO" | jq -er '.data.usage_monthly') || fail "OpenRouter response has no monthly usage"
 KEY_LIMIT=$(printf '%s' "$KEY_INFO" | jq -er '.data.limit') || fail "OpenRouter API key must have a hard limit"
-KEY_RESET=$(printf '%s' "$KEY_INFO" | jq -er '.data.limit_reset') || fail "OpenRouter API key must have a reset period"
-jq -ne --argjson usage "$USAGE_MONTHLY" --argjson soft "$SOFT_BUDGET_USD" '$usage < $soft' >/dev/null || fail "soft budget exceeded: $USAGE_MONTHLY USD"
+KEY_RESET=$(printf '%s' "$KEY_INFO" | jq -r '.data.limit_reset // "none"') || fail "cannot read OpenRouter key reset period"
+case "$KEY_RESET" in
+  monthly) CURRENT_USAGE="$USAGE_MONTHLY" ;;
+  none) CURRENT_USAGE=$(printf '%s' "$KEY_INFO" | jq -er '.data.usage') || fail "OpenRouter response has no total usage" ;;
+  *) fail "API key hard limit must reset monthly or never" ;;
+esac
+jq -ne --argjson usage "$CURRENT_USAGE" --argjson soft "$SOFT_BUDGET_USD" '$usage < $soft' >/dev/null || fail "soft budget exceeded: $CURRENT_USAGE USD"
 jq -ne --argjson limit "$KEY_LIMIT" --argjson hard "$HARD_BUDGET_USD" '$limit <= $hard' >/dev/null || fail "API key hard limit exceeds $HARD_BUDGET_USD USD"
-[ "$KEY_RESET" = "monthly" ] || fail "API key hard limit must reset monthly"
 
 git worktree add --detach "$WORKTREE" HEAD >/dev/null || fail "cannot create isolated worktree"
 WORKTREE_ADDED=1
+mkdir -p "$WORKTREE/.deepseek-request" || fail "cannot create delegated request directory"
+cp "$REPO_ROOT/$SPEC_PATH" "$WORKTREE/.deepseek-request/spec.md" || fail "cannot copy spec into isolated worktree"
 
 ALLOWED_PATHS=()
 if [ "$MODE" = "implement" ]; then
@@ -104,7 +110,17 @@ PERMISSION_EDIT="$EDIT_RULES" MODE="$MODE" jq -cn '
     "share":"disabled",
     "permission":{
       "*":"deny",
-      "read":"allow",
+      "read":{
+        "*":"allow",
+        "*.env":"deny",
+        "*.env.*":"deny",
+        "**/.env":"deny",
+        "**/.env.*":"deny",
+        ".git/**":"deny",
+        ".codex/**":"deny",
+        ".claude/**":"deny",
+        ".agents/**":"deny"
+      },
       "glob":"allow",
       "grep":"allow",
       "list":"allow",
@@ -137,10 +153,10 @@ PERMISSION_EDIT="$EDIT_RULES" MODE="$MODE" jq -cn '
 ' > "$TEMP_ROOT/opencode.json" || fail "cannot create OpenCode config"
 
 if [ "$MODE" = "research" ]; then
-  PROMPT="承認済み設計 $SPEC_PATH のためにコードベースを調査してください。変更は禁止です。根拠を file:line で示し、不明点と設計上のリスクを報告してください。"
+  PROMPT="設計案 .deepseek-request/spec.md のためにコードベースを調査してください。変更は禁止です。根拠を file:line で示し、不明点と設計上のリスクを報告してください。"
 else
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
-  PROMPT="承認済み設計 $SPEC_PATH に従い、次の本体コードだけを実装してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
+  PROMPT="承認済み設計 .deepseek-request/spec.md に従い、次の本体コードだけを実装してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
 fi
 
 cd "$WORKTREE" || fail "cannot enter isolated worktree"
@@ -157,14 +173,19 @@ env -i \
 OPENCODE_STATUS=$?
 set -e
 
+rm -rf "$WORKTREE/.deepseek-request"
+
 if [ "$MODE" = "implement" ]; then
   git add -N -- "${ALLOWED_PATHS[@]}" >/dev/null 2>&1 || true
 fi
 
 CHANGED_PATHS=()
-while IFS= read -r changed; do
-  [ -z "$changed" ] || CHANGED_PATHS+=("$changed")
-done < <(git status --porcelain | sed -E 's/^.. //' | sed -E 's/.* -> //')
+while IFS= read -r -d '' changed; do
+  CHANGED_PATHS+=("$changed")
+done < <(git diff --name-only -z)
+while IFS= read -r -d '' changed; do
+  CHANGED_PATHS+=("$changed")
+done < <(git ls-files --others --exclude-standard -z)
 for changed in "${CHANGED_PATHS[@]}"; do
   allowed=false
   for path in "${ALLOWED_PATHS[@]}"; do
@@ -184,9 +205,10 @@ jq -n \
   --arg task_id "$TASK_ID" \
   --arg model "$MODEL" \
   --argjson opencode_status "$OPENCODE_STATUS" \
-  --argjson usage_monthly "$USAGE_MONTHLY" \
+  --argjson usage_current "$CURRENT_USAGE" \
+  --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$(printf '%s\n' "${CHANGED_PATHS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')" \
-  '{mode:$mode,task_id:$task_id,model:$model,opencode_status:$opencode_status,usage_monthly_before:$usage_monthly,changed_paths:$changed_paths}' \
+  '{mode:$mode,task_id:$task_id,model:$model,opencode_status:$opencode_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths}' \
   > "$RESULT_ROOT/result.json" || fail "cannot create result metadata"
 
 printf 'result: %s\n' "$RESULT_ROOT"
