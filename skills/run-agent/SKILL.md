@@ -97,4 +97,4 @@ bash [skills_root]/run-agent/delegate-deepseek.sh research <task-id> <設計書>
 bash [skills_root]/run-agent/delegate-deepseek.sh implement <task-id> <設計書> <許可する本体コード>...
 ```
 
-実行器はOpenRouterの月次使用量38 USDで停止し、API keyに40 USD以下の月次hard limitがあることを検証する。ZDRと`data_collection: deny`をリクエストでも強制し、OpenCodeの外部プラグインを無効化する。
+実行器はOpenRouterの対象期間使用量38 USDで停止し、API keyに40 USD以下の月次またはリセットなしhard limitがあることを検証する。ZDRと`data_collection: deny`をリクエストでも強制し、OpenCodeの外部プラグインを無効化する。
