@@ -4,7 +4,9 @@ set -u
 
 readonly SOFT_BUDGET_USD="38"
 readonly HARD_BUDGET_USD="40"
-readonly MODEL="openrouter/deepseek/deepseek-v4-flash"
+readonly MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"
+readonly MODEL_ID="~deepseek/deepseek-v4-flash-latest"
+readonly MODEL_VARIANT="high"
 readonly OPENROUTER_KEY_ENDPOINT="https://openrouter.ai/api/v1/key"
 readonly TASK_ID_PATTERN='^[a-z0-9][a-z0-9-]{0,62}$'
 
@@ -104,7 +106,7 @@ if [ "$MODE" = "implement" ]; then
   done
 fi
 
-PERMISSION_EDIT="$EDIT_RULES" MODE="$MODE" jq -cn '
+PERMISSION_EDIT="$EDIT_RULES" MODEL_ID="$MODEL_ID" MODEL_VARIANT="$MODEL_VARIANT" MODE="$MODE" jq -cn '
   {
     "$schema":"https://opencode.ai/config.json",
     "share":"disabled",
@@ -138,11 +140,17 @@ PERMISSION_EDIT="$EDIT_RULES" MODE="$MODE" jq -cn '
     "provider":{
       "openrouter":{
         "models":{
-          "deepseek/deepseek-v4-flash":{
+          (env.MODEL_ID):{
             "options":{
+              "reasoningEffort":env.MODEL_VARIANT,
               "provider":{
                 "zdr":true,
                 "data_collection":"deny"
+              }
+            },
+            "variants":{
+              (env.MODEL_VARIANT):{
+                "reasoningEffort":env.MODEL_VARIANT
               }
             }
           }
@@ -169,7 +177,7 @@ env -i \
   OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   OPENCODE_CONFIG="$TEMP_ROOT/opencode.json" \
   OPENCODE_DISABLE_AUTOUPDATE=true \
-  opencode --pure run --format json --model "$MODEL" "$PROMPT" > "$RESULT_ROOT/opencode.jsonl" 2> "$RESULT_ROOT/opencode.stderr"
+  opencode --pure run --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$RESULT_ROOT/opencode.jsonl" 2> "$RESULT_ROOT/opencode.stderr"
 OPENCODE_STATUS=$?
 set -e
 
@@ -204,11 +212,12 @@ jq -n \
   --arg mode "$MODE" \
   --arg task_id "$TASK_ID" \
   --arg model "$MODEL" \
+  --arg model_variant "$MODEL_VARIANT" \
   --argjson opencode_status "$OPENCODE_STATUS" \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$(printf '%s\n' "${CHANGED_PATHS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')" \
-  '{mode:$mode,task_id:$task_id,model:$model,opencode_status:$opencode_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths}' \
+  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths}' \
   > "$RESULT_ROOT/result.json" || fail "cannot create result metadata"
 
 printf 'result: %s\n' "$RESULT_ROOT"
