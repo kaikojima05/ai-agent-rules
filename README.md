@@ -80,7 +80,7 @@ $init-agent codex
 
 ### DeepSeekへの実装委任
 
-`compose-prompt`と`run-agent`は、OpenCode + OpenRouter + DeepSeek V4 Flashを調査・本体実装に利用できる。CodexまたはClaude Codeが設計、テスト、レビュー、Gitを担当し、DeepSeekには読み取り調査または許可された本体コードの編集だけを委任する。
+`compose-prompt`と`run-agent`は、OpenCode + OpenRouter + DeepSeekを調査・本体実装に利用できる。委任時はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。CodexまたはClaude Codeが設計、テスト、レビュー、Gitを担当し、DeepSeekには読み取り調査または許可された本体コードの編集だけを委任する。
 
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
