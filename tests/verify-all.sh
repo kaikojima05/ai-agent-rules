@@ -55,6 +55,11 @@ for f in "$REPO"/hooks/shell/*.sh; do
   case "$f" in */hook-io.sh) continue ;; esac
   [ -x "$f" ] && ok "exec bit: $(basename "$f")" || ng "exec bit 無し: $(basename "$f")"
 done
+DS="$REPO/skills/run-agent/delegate-deepseek.sh"
+[ -x "$DS" ] && ok "exec bit: delegate-deepseek.sh" || ng "exec bit 無し: delegate-deepseek.sh"
+grep -q 'SOFT_BUDGET_USD="38"' "$DS" && grep -q 'HARD_BUDGET_USD="40"' "$DS" && ok "DeepSeek予算: soft=38 hard=40" || ng "DeepSeek予算が不正"
+grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
+grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
 
 echo "== 2. claude 配置シミュレーション =="
 mkdir -p "$S/claude-sim/.claude"
@@ -272,6 +277,8 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 引数なし apply-prompt を allow" || ng "rules: apply-prompt 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/run-agent/mark-prompt-done.sh user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/run-agent/delegate-deepseek.sh research task-id .codex/prompt/branch-task-prompt.md 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: delegate-deepseek の固定経路を allow" || ng "rules: delegate-deepseek 判定失敗 out=[$OUT]"
 else
   echo "skip codex CLI が無いため config / rules 実機検査を省略"
 fi
@@ -342,7 +349,7 @@ jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed 
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 MISS=0
-for SC in init-agent/init-agent.sh compose-prompt/apply-prompt.sh run-agent/mark-prompt-done.sh e2e/apply-e2e-plan.sh; do
+for SC in init-agent/init-agent.sh compose-prompt/apply-prompt.sh run-agent/mark-prompt-done.sh run-agent/delegate-deepseek.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
   jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }
