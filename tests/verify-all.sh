@@ -201,9 +201,11 @@ if grep -qE '^(sandbox_mode|\[sandbox_workspace_write\])' .codex/config.toml; th
 else
   ok "config: 旧 sandbox_mode との混在なし"
 fi
-for READ_PATH in '**/package.json' '**/.github/workflows/**' '**/migrations/**' '**/schema.prisma' '**/Dockerfile*' '**/docker-compose*' '**/*.tf' '**/yarn.lock' '**/package-lock.json' '**/pnpm-lock.yaml' '**/.env' '**/.env.*'; do
-  grep -Fq "\"$READ_PATH\" = \"read\"" .codex/config.toml && ok "permissions: $READ_PATH は read" || ng "permissions: $READ_PATH の保護漏れ"
-done
+if grep -qE '^"\*\*/.*" = "(read|write)"$' .codex/config.toml; then
+  ng "permissions: Codex が拒否する任意階層 read/write glob が残存"
+else
+  ok "permissions: 任意階層 read/write glob なし"
+fi
 if grep -q '@latest' .codex/config.toml || { grep 'git+https://' .codex/config.toml | grep -vqE '@[0-9a-f]{40}'; }; then
   ng "config: MCP に未固定バージョンが残存"
 else
@@ -229,6 +231,7 @@ jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks
 jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-agent-config.sh"))] | length' .codex/hooks.json)" = "2" ] && ok "設定保護hookを apply_patch/Bash に配線" || ng "設定保護hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' .codex/hooks.json)" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "lockfile保護hookを apply_patch/Bash に配線" || ng "lockfile保護hookの配線漏れ"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-review-files.sh"))] | length' .codex/hooks.json)" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "レビュー対象保護hookを apply_patch/Bash に配線" || ng "レビュー対象保護hookの配線漏れ"
 if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("guard-overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
   ok "未対応 ask hook を codex へ未配線"
 else
@@ -325,6 +328,10 @@ PE3=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patc
 [ -z "$(echo "$PE3" | bash $H/protect-env.sh)" ] && ok "protect-env: env.ts は棄権(誤爆なし)" || ng "protect-env: env.ts 誤爆"
 PL=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: yarn.lock\n+x\n*** End Patch"}}')
 [ "$(echo "$PL" | bash $H/protect-lockfiles.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-lockfiles: Codex apply_patch を deny" || ng "protect-lockfiles: Codex apply_patch 素通し"
+PRF=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: apps/api/infra/main.tf\n+x\n*** End Patch"}}')
+[ "$(echo "$PRF" | bash $H/protect-review-files.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-review-files: 任意階層の Terraform を deny" || ng "protect-review-files: 任意階層の Terraform が素通し"
+PRF_READ=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"cat apps/api/infra/main.tf"}}')
+[ -z "$(echo "$PRF_READ" | bash $H/protect-review-files.sh)" ] && ok "protect-review-files: 読み取りは許可" || ng "protect-review-files: 読み取りを誤拒否"
 PAC=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .codex/config.toml\n+x\n*** End Patch"}}')
 [ "$(echo "$PAC" | bash $H/protect-agent-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-agent-config: .codex patch を deny" || ng "protect-agent-config: .codex patch 素通し"
 PAC2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .agents/skills/e2e/SKILL.md\n+x\n*** End Patch"}}')
