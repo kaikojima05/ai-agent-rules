@@ -20,8 +20,8 @@ ai-agent-rules/
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
 │   ├── init-agent/         # placeholder（[agent_name] / [skills_root]）と [NOTE] の解決
 │   ├── compose-prompt/     # 対話で機能ごとの設計書を組み立てて prompt/ へ反映
-│   ├── run-agent/          # 設計書を実装順に 1 枚だけ実装して停止
-│   ├── tdd-run/            # TDD サイクルを 2 ゲートで自動連続実行
+│   ├── run-agent/          # 設計書1枚を選び、DeepSeek実装を統括して停止
+│   ├── tdd-run/            # シナリオ承認後、テスト・委任実装・レビューを連続実行
 │   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
 │   ├── rebase-squash/      # 1 ファイル = 1 コミット履歴を機能単位に squash
 │   ├── rule-audit/         # 差分と規約の突き合わせ
@@ -77,6 +77,22 @@ Claude Code は `AGENTS.md` と共通ディレクトリを `.claude/` 配下へ�
 # codex
 $init-agent codex
 ```
+
+### DeepSeekへの実装委任
+
+`compose-prompt`と`run-agent`は、OpenCode + OpenRouter + DeepSeek V4 Flashを調査・本体実装に利用できる。CodexまたはClaude Codeが設計、テスト、レビュー、Gitを担当し、DeepSeekには読み取り調査または許可された本体コードの編集だけを委任する。
+
+事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
+
+```bash
+export OPENROUTER_API_KEY="..."
+```
+
+API keyには40 USD以下の月次またはリセットなしhard limitを設定する。固定実行器は使用量38 USDで新規実行を止め、各リクエストでもZDRと学習利用拒否を強制する。キーはリポジトリへ保存しない。
+
+通常はスクリプトを直接操作せず、`compose-prompt`または`run-agent`から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellをDeepSeekへ許可しない。
+
+テストの穴をDeepSeekが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みシナリオから一意に解決できない場合だけ、ユーザーへシナリオ承認を求め直す。
 
 ## 注意
 
