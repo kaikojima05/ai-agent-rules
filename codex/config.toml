@@ -5,22 +5,9 @@ default_permissions = "distributed"
 approval_policy = "on-request"
 
 [permissions.distributed]
-# 通常ファイルは workspace 既定の write を継承し、レビュー対象だけ read へ降格する。
+# workspace 全体を write にし、任意階層の保護対象は PreToolUse hook で書き込みだけ拒否する。
+# filesystem の read は任意階層 glob を受理しないため、配布設定には使用しない。
 extends = ":workspace"
-
-[permissions.distributed.filesystem.":workspace_roots"]
-"**/package.json" = "read"
-"**/.github/workflows/**" = "read"
-"**/migrations/**" = "read"
-"**/schema.prisma" = "read"
-"**/Dockerfile*" = "read"
-"**/docker-compose*" = "read"
-"**/*.tf" = "read"
-"**/yarn.lock" = "read"
-"**/package-lock.json" = "read"
-"**/pnpm-lock.yaml" = "read"
-"**/.env" = "read"
-"**/.env.*" = "read"
 
 [permissions.distributed.network]
 # AGENTS.md の HTTP Request 規約に合わせ、localhost を含む通信を sandbox 外承認へ送る。
