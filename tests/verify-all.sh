@@ -13,6 +13,28 @@ PASS=0; FAIL=0
 MIN_SUPPORTED_CODEX_VERSION="0.138.0"
 VERSION_COMPONENT_COUNT=3
 EXPECTED_DUAL_HOOK_BINDINGS=2
+GIT_COMMIT_HEX_LENGTH=40
+PINNED_SERENA_SOURCE_PATTERN="^git\\+https://github\\.com/oraios/serena@[0-9a-f]{$GIT_COMMIT_HEX_LENGTH}$"
+SERENA_CODE_MUTATION_TOOLS=(
+  execute_shell_command
+  create_text_file
+  replace_content
+  replace_in_files
+  delete_lines
+  replace_lines
+  insert_at_line
+  replace_symbol_body
+  insert_after_symbol
+  insert_before_symbol
+  rename_symbol
+)
+CLAUDE_UNAVAILABLE_SERENA_TOOLS=(
+  check_onboarding_performed
+  list_dir
+  find_file
+  search_for_pattern
+)
+CODEX_CONTEXT_EXTRA_APPROVED_SERENA_TOOLS=(search_for_pattern)
 LEGACY_PRODUCT_NAME="claude"
 LEGACY_HOOK_NAME="enforce-${LEGACY_PRODUCT_NAME}-commit"
 LEGACY_TEST_LABEL="${LEGACY_PRODUCT_NAME}-commit:"
@@ -206,16 +228,33 @@ if grep -qE '^"\*\*/.*" = "(read|write)"$' .codex/config.toml; then
 else
   ok "permissions: 任意階層 read/write glob なし"
 fi
-if grep -q '@latest' .codex/config.toml || { grep 'git+https://' .codex/config.toml | grep -vqE '@[0-9a-f]{40}'; }; then
+if grep -q '@latest' .codex/config.toml || { grep 'git+https://' .codex/config.toml | grep -vqE "@[0-9a-f]{$GIT_COMMIT_HEX_LENGTH}"; }; then
   ng "config: MCP に未固定バージョンが残存"
 else
   ok "config: MCP 起動バージョンを固定"
 fi
 grep -q 'chrome-devtools-mcp@[0-9]' .codex/config.toml && ok "config: Chrome MCP のversion固定" || ng "config: Chrome MCP が未固定"
-grep -q 'serena-agent==[0-9]' .codex/config.toml && ok "config: Serena MCP のversion固定" || ng "config: Serena MCP が未固定"
-for DISABLED_TOOL in replace_symbol_body replace_regex replace_content insert_after_symbol insert_before_symbol; do
+CM="$REPO/claude/.mcp.json"
+CODEX_SERENA_SOURCE=$(awk -F'"' '/"--from", "git\+https:\/\/github.com\/oraios\/serena@/ { print $4 }' .codex/config.toml)
+CLAUDE_SERENA_SOURCE=$(jq -r '.mcpServers.serena.args[1] // empty' "$CM" 2>/dev/null)
+if printf '%s\n' "$CODEX_SERENA_SOURCE" | grep -qE "$PINNED_SERENA_SOURCE_PATTERN" && [ "$CLAUDE_SERENA_SOURCE" = "$CODEX_SERENA_SOURCE" ]; then
+  ok "serena: Claude/Codex は同じcommitを固定"
+else
+  ng "serena: Claude/Codex の固定commitが不正または不一致"
+fi
+if jq -e --arg source "$CODEX_SERENA_SOURCE" '
+  .mcpServers.serena.type == "stdio" and
+  .mcpServers.serena.command == "uvx" and
+  .mcpServers.serena.args == ["--from", $source, "serena", "start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
+' "$CM" >/dev/null 2>&1; then
+  ok "serena: Claude Code contextでcurrent projectを起動"
+else
+  ng "serena: Claude MCP起動設定が不正"
+fi
+for DISABLED_TOOL in "${SERENA_CODE_MUTATION_TOOLS[@]}"; do
   grep -q "\"$DISABLED_TOOL\"" .codex/config.toml && ok "serena: $DISABLED_TOOL を無効化" || ng "serena: $DISABLED_TOOL の無効化漏れ"
 done
+grep -q '"replace_regex"' .codex/config.toml && ng "serena: 廃止済みreplace_regexが残存" || ok "serena: 廃止済みtool名なし"
 for MCP_SERVER in serena chrome-devtools; do
   mcp_server_prompts_by_default "$MCP_SERVER" .codex/config.toml && ok "$MCP_SERVER: 未登録toolはprompt" || ng "$MCP_SERVER: 未登録toolのprompt漏れ"
   APPROVED_COUNT=0
@@ -223,8 +262,14 @@ for MCP_SERVER in serena chrome-devtools; do
     APPROVED_COUNT=$((APPROVED_COUNT+1))
     mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: $MCP_TOOL を approve" || ng "$MCP_SERVER: $MCP_TOOL の approve 漏れ"
   done < <(jq -r --arg prefix "mcp__${MCP_SERVER}__" '.permissions.allow[] | select(startswith($prefix)) | ltrimstr($prefix)' "$REPO/claude/settings.local.json")
+  if [ "$MCP_SERVER" = "serena" ]; then
+    for MCP_TOOL in "${CODEX_CONTEXT_EXTRA_APPROVED_SERENA_TOOLS[@]}"; do
+      APPROVED_COUNT=$((APPROVED_COUNT+1))
+      mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: context固有の$MCP_TOOLをapprove" || ng "$MCP_SERVER: context固有の$MCP_TOOLのapprove漏れ"
+    done
+  fi
   CONFIGURED_COUNT=$(grep -c "^\[mcp_servers\.$MCP_SERVER\.tools\." .codex/config.toml)
-  [ "$CONFIGURED_COUNT" = "$APPROVED_COUNT" ] && ok "$MCP_SERVER: Claude allow 一覧だけ approve" || ng "$MCP_SERVER: 未登録toolのapprove混入"
+  [ "$CONFIGURED_COUNT" = "$APPROVED_COUNT" ] && ok "$MCP_SERVER: context別allow一覧だけapprove" || ng "$MCP_SERVER: 未登録toolのapprove混入"
 done
 [ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
@@ -354,9 +399,19 @@ echo "== 7. 承認プロンプト回避の設定検査 =="
 SJ="$REPO/claude/settings.json"; SL="$REPO/claude/settings.local.json"
 jq -e . "$SJ" >/dev/null 2>&1 && ok "settings.json 構文" || ng "settings.json 構文"
 jq -e . "$SL" >/dev/null 2>&1 && ok "settings.local.json 構文" || ng "settings.local.json 構文"
+jq -e . "$CM" >/dev/null 2>&1 && ok ".mcp.json 構文" || ng ".mcp.json 構文"
 jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
+for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
+  PERMISSION="mcp__serena__${MCP_TOOL}"
+  jq -e --arg permission "$PERMISSION" '.permissions.allow | index($permission) | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: $MCP_TOOL を自動許可しない" || ng "Claude serena: $MCP_TOOL の無効な自動許可が残存"
+done
+for MCP_TOOL in "${SERENA_CODE_MUTATION_TOOLS[@]}"; do
+  PERMISSION="mcp__serena__${MCP_TOOL}"
+  jq -e --arg permission "$PERMISSION" '.permissions.deny | index($permission)' "$SL" >/dev/null 2>&1 && ok "Claude serena: $MCP_TOOL をdeny" || ng "Claude serena: $MCP_TOOL のdeny漏れ"
+done
+jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
 for SC in init-agent/init-agent.sh compose-prompt/apply-prompt.sh run-agent/mark-prompt-done.sh run-agent/delegate-deepseek.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
