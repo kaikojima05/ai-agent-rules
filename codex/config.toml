@@ -69,7 +69,7 @@ approval_mode = "approve"
 [mcp_servers.serena]
 command = "uvx"
 args = [
-  "--from", "serena-agent==1.5.3",
+  "--from", "git+https://github.com/oraios/serena@29d07d4f6b7a04a0db3981d6c6be6f736cfb44d2",
   "serena", "start-mcp-server",
   "--context", "codex",
   "--project-from-cwd",
@@ -77,23 +77,18 @@ args = [
 startup_timeout_sec = 30
 default_tools_approval_mode = "prompt"
 disabled_tools = [
-  "replace_symbol_body",
-  "replace_regex",
   "replace_content",
+  "replace_in_files",
+  "delete_lines",
+  "replace_lines",
+  "insert_at_line",
+  "replace_symbol_body",
   "insert_after_symbol",
   "insert_before_symbol",
+  "rename_symbol",
 ]
 
-[mcp_servers.serena.tools.check_onboarding_performed]
-approval_mode = "approve"
-
 [mcp_servers.serena.tools.onboarding]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.list_dir]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.find_file]
 approval_mode = "approve"
 
 [mcp_servers.serena.tools.list_memories]
