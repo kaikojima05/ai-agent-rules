@@ -66,7 +66,25 @@ Codex 0.138.0 以上を前提とする。次の対応を崩さずに配置する
 3. `/hooks` を開き、**init-agent 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
 4. Codexを再起動し、config / rules / hooks / skillsを新しいセッションで読み直す。
 
-Claude Code は `AGENTS.md` と共通ディレクトリを `.claude/` 配下へ配置し、ルートの `CLAUDE.md` に `@AGENTS.md` を置いた上で `/init-agent claude` を実行する。
+### Claude Code への配置
+
+Claude Code は次の対応で配置する。MCP の共有設定だけは `.claude/` 配下ではなく、project root の `.mcp.json` に置く。
+
+| 配布元 | 配置先 |
+|---|---|
+| `AGENTS.md` | `<repo>/AGENTS.md` |
+| `claude/CLAUDE.md` | `<repo>/CLAUDE.md` |
+| `claude/.mcp.json` | `<repo>/.mcp.json` |
+| `claude/settings.json` | `<repo>/.claude/settings.json` |
+| `claude/settings.local.json` | `<repo>/.claude/settings.local.json` |
+| `claude/.gitignore` | `<repo>/.claude/.gitignore` |
+| `hooks/` | `<repo>/.claude/hooks/` |
+| `rules/` | `<repo>/.claude/rules/` |
+| `prompt/` | `<repo>/.claude/prompt/` |
+| `e2e/` | `<repo>/.claude/e2e/` |
+| `skills/` | `<repo>/.claude/skills/` |
+
+配置後に project を trust し、`.mcp.json` の Serena を承認してから `/init-agent claude` を実行する。
 
 対象エージェントに応じた呼び出し形式:
 
