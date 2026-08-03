@@ -77,6 +77,8 @@ args = [
 startup_timeout_sec = 30
 default_tools_approval_mode = "prompt"
 disabled_tools = [
+  "execute_shell_command",
+  "create_text_file",
   "replace_content",
   "replace_in_files",
   "delete_lines",
