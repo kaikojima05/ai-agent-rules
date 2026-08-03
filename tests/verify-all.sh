@@ -260,12 +260,12 @@ for MCP_SERVER in serena chrome-devtools; do
   APPROVED_COUNT=0
   while IFS= read -r MCP_TOOL; do
     APPROVED_COUNT=$((APPROVED_COUNT+1))
-    mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: $MCP_TOOL を approve" || ng "$MCP_SERVER: $MCP_TOOL の approve 漏れ"
+    mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: ${MCP_TOOL} を approve" || ng "$MCP_SERVER: ${MCP_TOOL} の approve 漏れ"
   done < <(jq -r --arg prefix "mcp__${MCP_SERVER}__" '.permissions.allow[] | select(startswith($prefix)) | ltrimstr($prefix)' "$REPO/claude/settings.local.json")
   if [ "$MCP_SERVER" = "serena" ]; then
     for MCP_TOOL in "${CODEX_CONTEXT_EXTRA_APPROVED_SERENA_TOOLS[@]}"; do
       APPROVED_COUNT=$((APPROVED_COUNT+1))
-      mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: context固有の$MCP_TOOLをapprove" || ng "$MCP_SERVER: context固有の$MCP_TOOLのapprove漏れ"
+      mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: context固有の${MCP_TOOL}をapprove" || ng "$MCP_SERVER: context固有の${MCP_TOOL}のapprove漏れ"
     done
   fi
   CONFIGURED_COUNT=$(grep -c "^\[mcp_servers\.$MCP_SERVER\.tools\." .codex/config.toml)
@@ -405,11 +405,11 @@ jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/d
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
   PERMISSION="mcp__serena__${MCP_TOOL}"
-  jq -e --arg permission "$PERMISSION" '.permissions.allow | index($permission) | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: $MCP_TOOL を自動許可しない" || ng "Claude serena: $MCP_TOOL の無効な自動許可が残存"
+  jq -e --arg permission "$PERMISSION" '.permissions.allow | index($permission) | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: ${MCP_TOOL} を自動許可しない" || ng "Claude serena: ${MCP_TOOL} の無効な自動許可が残存"
 done
 for MCP_TOOL in "${SERENA_CODE_MUTATION_TOOLS[@]}"; do
   PERMISSION="mcp__serena__${MCP_TOOL}"
-  jq -e --arg permission "$PERMISSION" '.permissions.deny | index($permission)' "$SL" >/dev/null 2>&1 && ok "Claude serena: $MCP_TOOL をdeny" || ng "Claude serena: $MCP_TOOL のdeny漏れ"
+  jq -e --arg permission "$PERMISSION" '.permissions.deny | index($permission)' "$SL" >/dev/null 2>&1 && ok "Claude serena: ${MCP_TOOL} をdeny" || ng "Claude serena: ${MCP_TOOL} のdeny漏れ"
 done
 jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
