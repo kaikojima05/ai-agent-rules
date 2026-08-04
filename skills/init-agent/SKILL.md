@@ -47,6 +47,7 @@ bash [skills_root]/init-agent/init-agent.sh <agent>
 - スクリプトが自動で行うこと:
   - 設定ディレクトリ・`AGENTS.md`・skills ツリー（codex は `.agents/`）配下で `[agent_name]` / `[skills_root]` を含む全ファイルを検出して置換する（`.[agent_name]/...` の dot は placeholder の外なので保持される。`init-agent/` 配下は説明・処理本体のため除外）
   - `require-test.sh` の `[NOTE]` ブロックを、種別ごとの確定条件へ畳む（claude/codex の条件はスクリプトの `case` を唯一の真実とする）
+  - 置換後に同じ対象を再検査し、placeholder が残っていれば対象ファイルを報告して失敗終了する
 - 上記3種以外を扱う場合は、スクリプトの `case` に分岐を追加してから実行する
 - Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る（permission は `settings.local.json` の事前 allow が担保するため承認プロンプトは出ない）
   - Why: 対象ツリー（`.claude/` 等）は sandbox の denyWrite で保護されており、sandbox 内での実行は必ず「Operation not permitted」で失敗する。失敗→sandbox 外で再実行という二度手間を踏まないための除外設定である
@@ -68,12 +69,5 @@ Why: 置換は完全に決定的な処理であり、その都度インタプリ
 ## 注意事項
 
 - 本リポジトリ（テンプレート元）のファイルは一切変更しない。スクリプトは配置済みツリー（`.claude` / `.codex` / `.agents` / `AGENTS.md`）のみを対象とする
-- placeholder の置換漏れがないか、処理後に grep で確認すること
-  - `init-agent/` 配下は placeholder をあえて残す（スキル自身の説明・処理本体のため）。確認時は `| grep -v /init-agent/` で除外する
-  - **確認は必ず明示パスで行う**: `command grep -rnE "\[agent_name\]|\[skills_root\]" AGENTS.md .[agent_name] .agents 2>/dev/null | grep -v /init-agent/` のように
-    対象ディレクトリ（`.claude` / `.codex`、codex 配置なら `.agents` も）と `AGENTS.md` を直接指定すること
-  - bare な `grep -r ... .`（ルートを `.` 指定）を使ってはならない
-    - Why: エージェント設定ディレクトリと `AGENTS.md` は通常 `.gitignore` で無視されており、
-      Claude Code の `grep` は `ugrep --ignore-files` ラッパーで `.gitignore` を尊重するため、
-      ルート起点の再帰検索は対象ツリーを丸ごとスキップし「置換漏れゼロ」と誤検出する
-    - 迂回したい場合は `command grep -rn ...`（生の grep）を使う
+- placeholder の置換漏れ確認は `init-agent.sh` の終了条件に含まれる。処理後に別の `grep` を実行しない
+- `init-agent/` 配下はスキル自身の説明・処理本体として placeholder を意図的に残すため、スクリプトの検査対象外とする
