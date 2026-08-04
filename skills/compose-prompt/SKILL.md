@@ -1,40 +1,43 @@
 ---
 name: compose-prompt
-description: "機能ごとの設計書と実装順の index を対話で組み立て、@.[agent_name]/prompt/ へ反映する"
+description: "meeting から draft または apply mode で呼ばれ、確定要件から未承認の設計ドラフトを作るか、ponytail 後に最終承認された同一 revision を @.[agent_name]/prompt/ へ正式反映する"
 allowed-tools: Read, Write, Edit, Bash
-disable-model-invocation: true
+user-invocable: false
 ---
 
 ## 目的
 
-これまでの会話から判断した修正や追加のタスクを、ユーザーとエージェントが対話しながらプロンプトとしてまとめる。
+確定要件から設計ドラフトを作る責務と、承認済みドラフトを固定経路で正式反映する責務を持つ。
+要件監査、ユーザーへの質問、設計の単純化、最終承認は meeting が統括する。
 
 ## 実行フロー
 
-### Step 1: スキルを呼び出す
+### Step 1: mode を確定する
 
-スキルは引数付きで呼び出せる:
+meeting から渡された先頭引数を mode として使う。
 
-```
-/compose-prompt トークンに認証情報を追加する
-```
+- `draft`: `preflight_ready` の要件 revision から未承認ドラフトを作る
+- `apply`: ponytail 後に最終承認された draft revision を正式反映する
 
-- **引数あり**: 引数に渡された概要を中心にプロンプトを構築する →  ユーザーと対話しながら要件を整理してプロンプトを構築する。
-- **引数なし**: エージェントが会話の中から自律的にプロンプトの概要を抽出 → 方向性が間違っていないかユーザーに確認する → ユーザーと対話しながら要件を整理してプロンプトを構築する。
+mode がない、または上記以外なら何も変更せず `invalid_mode` を meeting へ返す。
 
-### Step 2: [agent_name]が初期ドラフトを作成する
+### Step 2: draft mode で初期ドラフトを作成する
+
+`draft` mode では、同じ要件 revision に対する design-preflight の `preflight_ready` が現在の会話にあることを確認する。結果がない、対象範囲が変わった、または重大な論点が未回答なら何も作らず `preflight_required` を返す。
+
+`draft-prompt/` が既に存在する場合は、現在の要件 revision に対する直前の draft revision だと会話から確認できる場合だけ Edit で更新する。別要件の残骸、所有者不明、または対応する revision がない場合は一切触れず `draft_conflict` を meeting へ返す。
 
 整理された要件を元に、[agent_name]がプロンプトの初期ドラフトを作成する。この時点では未承認であり、`.[agent_name]/prompt/`へ反映しない。
 
 ドラフトは「後述の構成の一式」を **プロジェクトルートの `draft-prompt/`** に作る（`.prompt.md` + `branch-<機能名>-prompt.md` × N）。
-ディレクトリの中身はこの 2 種類だけにすること。メモや作業ファイルを同居させると Step 3 のスクリプトが弾く。
+ディレクトリの中身はこの 2 種類だけにすること。メモや作業ファイルを同居させると Step 5 のスクリプトが弾く。
 
 - Why: ユーザーがレビューする対象なので、エディタでそのまま開ける場所に置く。セッションの一時領域（scratchpad / `$TMPDIR`）はパスが不規則でユーザーが確認しづらい
-- Why: `.[agent_name]/` は sandbox の denyWrite で保護されておりエージェントは直接書き込めない。`draft-prompt/` は保護対象外なので通常の Write / Edit で往復でき、保護領域への書き込みは Step 3 の固定スクリプト 1 回に集約される
-- `draft-prompt/` は Step 3 でスクリプトが畳むまでの一時的な置き場。**コミットしてはならない**（`git add` の対象に含めない。恒久的に無視したいならプロジェクトの `.gitignore` に足すのはユーザーの判断）
+- Why: `.[agent_name]/` は sandbox の denyWrite で保護されておりエージェントは直接書き込めない。`draft-prompt/` は保護対象外なので通常の Write / Edit で往復でき、保護領域への書き込みは Step 5 の固定スクリプト 1 回に集約される
+- `draft-prompt/` は Step 5 でスクリプトが畳むまでの一時的な置き場。**コミットしてはならない**（`git add` の対象に含めない。恒久的に無視したいならプロジェクトの `.gitignore` に足すのはユーザーの判断）
 - ドラフトの改訂は **Edit** で行う。既存ファイルへの Write（全上書き）は `guard-overwrite.sh` が ask に倒すため、レビュー往復のたびに承認プロンプトが出る（新規作成の Write は素通りするので初回作成はそのままでよい）
 
-### Step 3: DeepSeekへコードベース調査を委任する
+### Step 3: draft mode でコードベース調査を委任する
 
 各設計書の初期ドラフトを、固定実行器の`research`モードへ1枚ずつ渡す。
 
@@ -45,17 +48,25 @@ bash [skills_root]/run-agent/delegate-deepseek.sh research <task-id> draft-promp
 - DeepSeekは読み取り専用とし、コード、テスト、設計ドラフトを変更させない
 - 調査結果は`file:line`の根拠、不明点、設計リスクとして返させる
 - [agent_name]が重要な根拠を実ファイルで再確認する。DeepSeekの自己申告だけで設計へ採用しない
-- 調査失敗、予算超過、ZDR対応先なしの場合は理由を報告し、推測で穴埋めしない
+- 調査失敗、予算超過、ZDR対応先なしの場合は理由と未調査範囲を含む `research_blocked` を meeting へ返し、推測で穴埋めしない
 
-調査結果を踏まえて[agent_name]がドラフトを更新する。既存の会話と異なる設計判断が必要なら、[agent_name]だけで決めずユーザーとの相談へ戻る。
+調査結果を踏まえて[agent_name]がドラフトを更新する。要件 revision と異なる判断が必要ならユーザーへ直接質問せず、選択肢、挙動差、推奨を含む `consultation_required` を meeting へ返す。
 
-### Step 4: ユーザーがドラフトを確認する
+調査を反映し、未決定事項がなければ、対象ファイル名と内容で識別できる draft revision とともに `draft_ready` を返して停止する。ponytail、最終承認、正式反映へ続けて進まない。
 
-ユーザーは設計内容を確認し、必要に応じてフィードバックする。[agent_name]はドラフトを修正し、承認が得られるまで正式な設計へ反映しない。
+### Step 4: apply mode の前提を確認する
 
-### Step 5: ドラフト一式を @.[agent_name]/prompt/ へ移す
+`apply` mode では、次をすべて確認する:
 
-ユーザーの確認が取れたら、専用スクリプトでドラフトを反映する。**引数は取らない** — 移動元（`draft-prompt/`）・宛先（`.[agent_name]/prompt/`）・受け入れるファイル名（`.prompt.md` と `branch-<機能名>-prompt.md`）がすべてスクリプト内に固定されているため、サンドボックス外実行の事前 allow はこの経路 1 本に限定される。
+1. ponytail が現在の draft revision に `ponytail_ready` を返している
+2. ユーザーの最終承認が同じ draft revision に対するものである
+3. 最終承認後に `draft-prompt/` のファイル名または内容が変わっていない
+
+一つでも確認できなければ正式反映せず、`ponytail_required` または `approval_required` を meeting へ返す。古い承認を推測で流用しない。
+
+### Step 5: apply mode でドラフト一式を @.[agent_name]/prompt/ へ移す
+
+Step 4 を満たした場合だけ、専用スクリプトでドラフトを反映する。**引数は取らない** — 移動元（`draft-prompt/`）・宛先（`.[agent_name]/prompt/`）・受け入れるファイル名（`.prompt.md` と `branch-<機能名>-prompt.md`）がすべてスクリプト内に固定されているため、サンドボックス外実行の事前 allow はこの経路 1 本に限定される。
 
 ```
 bash [skills_root]/compose-prompt/apply-prompt.sh
