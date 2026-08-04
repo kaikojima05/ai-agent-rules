@@ -84,4 +84,10 @@ while IFS= read -r f; do
   fi
 done < <(grep -rl '\[NOTE\]: init-agent' $TARGETS | grep -v '/init-agent/')
 
+# 3) 置換後検証: 承認済みの固定スクリプト内で完結させ、別の shell 承認を発生させない
+while IFS= read -r f; do
+  echo "ERROR: unresolved placeholder: $f" >&2
+  FAILED=1
+done < <(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS | grep -v '/init-agent/')
+
 exit "$FAILED"
