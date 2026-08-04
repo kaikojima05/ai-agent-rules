@@ -19,7 +19,10 @@ ai-agent-rules/
 │   └── typescript/         # TypeScript プロジェクト固有のルール
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
 │   ├── init-agent/         # placeholder（[agent_name] / [skills_root]）と [NOTE] の解決
-│   ├── compose-prompt/     # 対話で機能ごとの設計書を組み立てて prompt/ へ反映
+│   ├── meeting/            # 要件監査・設計作成・単純化を統括するユーザー向け入口
+│   ├── design-preflight/   # 要件の穴と既存機能との衝突を設計前に調査
+│   ├── compose-prompt/     # 機能ごとの未承認設計ドラフトを作成
+│   ├── ponytail/           # YAGNI・既存機能再利用の観点で設計を単純化
 │   ├── run-agent/          # 設計書1枚を選び、DeepSeek実装を統括して停止
 │   ├── tdd-run/            # シナリオ承認後、テスト・委任実装・レビューを連続実行
 │   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
@@ -96,9 +99,11 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 $init-agent codex
 ```
 
-### DeepSeekへの実装委任
+設計作成では `meeting` だけをユーザー向け入口として呼び出す。エージェントが `design-preflight → compose-prompt draft → ponytail → compose-prompt apply` を必要に応じて再実行し、ユーザーにはコードベースから判定できない設計判断だけを一度に一つ確認する。
 
-`compose-prompt`と`run-agent`は、OpenCode + OpenRouter + DeepSeekを調査・本体実装に利用できる。委任時はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。CodexまたはClaude Codeが設計、テスト、レビュー、Gitを担当し、DeepSeekには読み取り調査または許可された本体コードの編集だけを委任する。
+### DeepSeekへの調査・実装委任
+
+`design-preflight`、`compose-prompt`、`ponytail`、`run-agent`は、コードベースの探索をDeepSeekなどの下位モデルへ委任する。上位モデルは調査項目の設計、重要根拠の再確認、要件と設計の判断、テスト、レビュー、Gitを担当し、下位モデルには読み取り調査または許可された本体コードの編集だけを委任する。固定実行器を使う場合はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
@@ -108,7 +113,7 @@ export OPENROUTER_API_KEY="..."
 
 API keyには40 USD以下の月次またはリセットなしhard limitを設定する。固定実行器は使用量38 USDで新規実行を止め、各リクエストでもZDRと学習利用拒否を強制する。キーはリポジトリへ保存しない。
 
-通常はスクリプトを直接操作せず、`compose-prompt`または`run-agent`から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellをDeepSeekへ許可しない。
+通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellをDeepSeekへ許可しない。
 
 テストの穴をDeepSeekが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みシナリオから一意に解決できない場合だけ、ユーザーへシナリオ承認を求め直す。
 
