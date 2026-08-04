@@ -85,6 +85,43 @@ grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q '"reasoningEffort":env.MODEL_VAR
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
 
+echo "== 設計pipelineのskill境界 =="
+MEETING_SKILL="$REPO/skills/meeting/SKILL.md"
+DESIGN_PREFLIGHT_SKILL="$REPO/skills/design-preflight/SKILL.md"
+COMPOSE_PROMPT_SKILL="$REPO/skills/compose-prompt/SKILL.md"
+PONYTAIL_SKILL="$REPO/skills/ponytail/SKILL.md"
+for SKILL_FILE in "$MEETING_SKILL" "$DESIGN_PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTAIL_SKILL"; do
+  [ -f "$SKILL_FILE" ] && ok "design skill存在: $(basename "$(dirname "$SKILL_FILE")")" || ng "design skill不在: $SKILL_FILE"
+done
+grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq '  - Skill(design-preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(compose-prompt *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && ok "meetingだけをユーザー起動・質問担当にする" || ng "meetingの起動・質問・skill境界が不正"
+grep -q 'design-preflight → compose-prompt draft → ponytail' "$MEETING_SKILL" && ok "meetingの基本順序" || ng "meetingの基本順序が不正"
+for INTERNAL_SKILL in "$DESIGN_PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTAIL_SKILL"; do
+  grep -q '^user-invocable: false$' "$INTERNAL_SKILL" && ok "内部skillをmenuから隠す: $(basename "$(dirname "$INTERNAL_SKILL")")" || ng "内部skillがユーザー起動可能: $INTERNAL_SKILL"
+  if grep -q '^disable-model-invocation: true$' "$INTERNAL_SKILL"; then
+    ng "内部skillをmodelが呼べない: $INTERNAL_SKILL"
+  else
+    ok "内部skillをmodelが呼べる: $(basename "$(dirname "$INTERNAL_SKILL")")"
+  fi
+done
+if sed -n '1,/^---$/p' "$DESIGN_PREFLIGHT_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|Bash|AskUserQuestion)'; then
+  ng "design-preflightに書き込みtoolがある"
+else
+  ok "design-preflightは読み取り専用"
+fi
+if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|Bash|AskUserQuestion)'; then
+  ng "ponytailが広域書き込み・Bash・質問toolを事前許可"
+else
+  ok "ponytailは調査toolだけを事前許可"
+fi
+grep -q 'DeepSeek など利用可能な下位モデル' "$DESIGN_PREFLIGHT_SKILL" && grep -q 'DeepSeek など利用可能な下位モデル' "$PONYTAIL_SKILL" && ok "調査を下位モデルへ委任" || ng "下位モデル委任の記述漏れ"
+grep -q 'YAGNI' "$PONYTAIL_SKILL" && grep -q '<input type="date">' "$PONYTAIL_SKILL" && grep -q 'JS より CSS' "$PONYTAIL_SKILL" && ok "ponytailの単純化原則" || ng "ponytailの単純化原則が不足"
+grep -q 'draft_ready.*停止' "$COMPOSE_PROMPT_SKILL" && grep -q 'Step 4: apply mode' "$COMPOSE_PROMPT_SKILL" && grep -q '`draft_conflict`' "$COMPOSE_PROMPT_SKILL" && ok "compose-promptのdraft/applyと既存draft境界" || ng "compose-promptのmode・draft境界が不正"
+if [ -f "$REPO/skills/design-pipeline/SKILL.md" ] || command grep -rn 'design-pipeline' "$REPO/README.md" "$REPO/skills" >/dev/null 2>&1; then
+  ng "旧design-pipeline参照が残存"
+else
+  ok "旧design-pipeline参照なし"
+fi
+
 echo "== 2. claude 配置シミュレーション =="
 mkdir -p "$S/claude-sim/.claude"
 cp "$REPO/AGENTS.md" "$S/claude-sim/"
