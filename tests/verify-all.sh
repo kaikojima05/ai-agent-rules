@@ -190,6 +190,46 @@ if bash "$MD" "../../etc/passwd" > mark3.out 2>&1; then ng "mark-prompt-done: �
 if bash "$MD" nonexistent > mark4.out 2>&1; then ng "mark-prompt-done: 未登録の機能名を通した"; else ok "mark-prompt-done: 未登録の機能名を拒否"; fi
 rm -rf .claude/prompt
 
+echo "== 2.75 DeepSeek research の Bash 3.2 回帰（外部通信なし） =="
+DELEGATE_REPO="$S/delegate-research"
+DELEGATE_BIN="$DELEGATE_REPO/bin"
+DELEGATE_SCRIPT="$DELEGATE_REPO/.claude/skills/run-agent/delegate-deepseek.sh"
+mkdir -p "$DELEGATE_BIN" "$(dirname "$DELEGATE_SCRIPT")"
+cp .claude/skills/run-agent/delegate-deepseek.sh "$DELEGATE_SCRIPT"
+printf '#!/bin/bash\nprintf '\''{"data":{"usage_monthly":0,"usage":0,"limit":40,"limit_reset":"monthly"}}\\n'\''\n' > "$DELEGATE_BIN/curl"
+printf '#!/bin/bash\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/curl" "$DELEGATE_BIN/opencode"
+cd "$DELEGATE_REPO"
+git init -q
+git config user.email tester@example.com
+git config user.name tester
+printf '# research spec\n' > spec.md
+git add spec.md
+git commit -qm "test: research fixture"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research empty-research spec.md > delegate-empty.out 2>&1; then
+  ok "delegate-deepseek: Bash 3.2で変更ゼロのresearchを完了"
+else
+  ng "delegate-deepseek: 変更ゼロのresearchで失敗"; cat delegate-empty.out
+fi
+EMPTY_RESULT="$DELEGATE_REPO/.claude/tmp/deepseek/empty-research/result.json"
+if [ -f "$EMPTY_RESULT" ] && [ "$(jq -c '.changed_paths' "$EMPTY_RESULT")" = "[]" ]; then
+  ok "delegate-deepseek: 変更ゼロを空配列で記録"
+else
+  ng "delegate-deepseek: 変更ゼロのresult.jsonが不正"
+fi
+printf '#!/bin/bash\ntouch protected-change.txt\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research rejected-research spec.md > delegate-rejected.out 2>&1; then
+  ng "delegate-deepseek: research中の変更を許可した"
+else
+  ok "delegate-deepseek: research中の変更を拒否"
+fi
+if [ -e "$DELEGATE_REPO/.claude/tmp/deepseek/rejected-research" ]; then
+  ng "delegate-deepseek: 後処理失敗の不完全な結果が残存"
+else
+  ok "delegate-deepseek: 後処理失敗の不完全な結果を残さない"
+fi
+
 echo "== 3. hook 全数テスト（claude 配置） =="
 cp "$SUITE/run-tests.sh" "$S/claude-sim/run-tests.sh"
 bash "$S/claude-sim/run-tests.sh" > hook-tests.out 2>&1
