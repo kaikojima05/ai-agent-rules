@@ -9,17 +9,37 @@ PASS=0; FAIL=0
 # hook にJSON入力を与えて stdout を返すヘルパー関数
 run() { echo "$2" | bash "$H/$1"; }
 
+matches_expected() { # expect(deny|ask|empty) output
+  case "$1" in
+    deny)  [ "$(echo "$2" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] ;;
+    ask)   [ "$(echo "$2" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "ask" ] ;;
+    empty) [ -z "$2" ] ;;
+  esac
+}
+
 # 実行結果が期待(deny/ask/empty)と一致するか判定して集計する関数
 check() { # name expect(deny|ask|empty) hook json
   OUT=$(run "$3" "$4")
   # deny/ask は「stdout 全体が決定 JSON としてパース可能」まで検査する（出力汚染の検出）
-  case "$2" in
-    deny)  [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] ;;
-    ask)   [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "ask" ] ;;
-    empty) [ -z "$OUT" ] ;;
-  esac
-  if [ $? -eq 0 ]; then PASS=$((PASS+1)); echo "ok   $1"
+  if matches_expected "$2" "$OUT"; then PASS=$((PASS+1)); echo "ok   $1"
   else FAIL=$((FAIL+1)); echo "FAIL $1 -> [$OUT]"; fi
+}
+
+check_bash_group() { # name expect hook command...
+  GROUP_NAME=$1
+  EXPECTED=$2
+  HOOK=$3
+  shift 3
+  GROUP_FAILURES=
+  for COMMAND in "$@"; do
+    INPUT=$(jq -cn --arg command "$COMMAND" '{tool_name:"Bash",tool_input:{command:$command}}')
+    OUT=$(run "$HOOK" "$INPUT")
+    if ! matches_expected "$EXPECTED" "$OUT"; then
+      GROUP_FAILURES="${GROUP_FAILURES}\ncommand=[$COMMAND] output=[$OUT]"
+    fi
+  done
+  if [ -z "$GROUP_FAILURES" ]; then PASS=$((PASS+1)); echo "ok   $GROUP_NAME"
+  else FAIL=$((FAIL+1)); printf 'FAIL %s%b\n' "$GROUP_NAME" "$GROUP_FAILURES"; fi
 }
 
 check_rewrite() { # name expected-command hook json
@@ -31,6 +51,11 @@ check_rewrite() { # name expected-command hook json
   else
     FAIL=$((FAIL+1)); echo "FAIL $1 -> decision=[$ACTUAL_DECISION] command=[$ACTUAL_COMMAND]"
   fi
+}
+
+check_bash_rewrite() { # name expected-command hook command
+  INPUT=$(jq -cn --arg command "$4" '{tool_name:"Bash",tool_input:{command:$command}}')
+  check_rewrite "$1" "$2" "$3" "$INPUT"
 }
 
 # --- require-test ---
@@ -65,36 +90,37 @@ check "inline-eval: node -e は deny"          deny  deny-inline-eval.sh '{"tool
 check "inline-eval: python3 foo.py は棄権"    empty deny-inline-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 foo.py"}}'
 
 # --- normalize-readonly-search ---
-check_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
+check_bash_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
   "rg --no-messages -n 'foo|bar' front --glob '!generated/**'" \
   normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"rg -n '\''foo|bar'\'' front --glob '\''!generated/**'\'' 2>/dev/null"}}'
-check_rewrite "readonly-search: rgとsortの安全なpipelineを許可" \
+  "rg -n 'foo|bar' front --glob '!generated/**' 2>/dev/null"
+check_bash_rewrite "readonly-search: rgとsortの安全なpipelineを許可" \
   "rg --no-messages --files draft-prompt .codex/rules rules | sort" \
   normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"rg --files draft-prompt .codex/rules rules 2>/dev/null | sort"}}'
-check_rewrite "readonly-search: stderr操作なしのsortも許可" \
+  "rg --files draft-prompt .codex/rules rules 2>/dev/null | sort"
+check_bash_rewrite "readonly-search: stderr操作なしのsortも許可" \
   "rg --files src | sort" \
   normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"rg --files src | sort"}}'
-check_rewrite "readonly-search: 読み取り専用findとsortを許可" \
+  "rg --files src | sort"
+check_bash_rewrite "readonly-search: 読み取り専用findとsortを許可" \
   "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null | sort" \
   normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null | sort"}}'
-check "readonly-search: stdout書き込みは棄権" empty normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"rg foo > result.txt 2>/dev/null"}}'
-check "readonly-search: 複合コマンドは棄権" empty normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"rg foo; rm target 2>/dev/null"}}'
-check "readonly-search: sort以外のpipelineは棄権" empty normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"rg foo 2>/dev/null | tee result.txt"}}'
-check "readonly-search: command substitutionは棄権" empty normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"rg $(danger) 2>/dev/null"}}'
-check "readonly-search: find deleteは棄権" empty normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"find tmp -type f -delete 2>/dev/null | sort"}}'
-check "readonly-search: quoteで分割したfind actionは棄権" empty normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"find tmp \"-de\"\"lete\" 2>/dev/null | sort"}}'
-check "readonly-search: findからsort以外へのpipelineは棄権" empty normalize-readonly-search.sh \
-  '{"tool_name":"Bash","tool_input":{"command":"find tmp -type f -print 2>/dev/null | tee result.txt"}}'
+  "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null | sort"
+check_bash_group "readonly-search: 単一コマンドを誤拒否しない" empty normalize-readonly-search.sh \
+  "rg 'foo|bar' src" \
+  "sed -n '1,240p' src/foo.ts" \
+  'echo "$VALUE" 2>&1' \
+  "rg foo > result.txt 2>/dev/null"
+check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny normalize-readonly-search.sh \
+  "rg foo; rm target 2>/dev/null" \
+  "rg foo 2>/dev/null | tee result.txt" \
+  'rg $(danger) 2>/dev/null' \
+  $'pwd\nls' \
+  "zsh -lc 'pwd; ls'" \
+  "sleep 1 & echo done" \
+  'for f in a.ts b.ts; do if test -f "$f"; then sed -n '\''1,240p'\'' "$f"; fi; done; rg --files src | rg '\''smtp|s3'\''' \
+  "find tmp -type f -delete 2>/dev/null | sort" \
+  'find tmp "-de""lete" 2>/dev/null | sort'
 
 # --- deny-registry-fetch ---
 check "registry-fetch: npx は deny"           deny  deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"npx create-app"}}'
