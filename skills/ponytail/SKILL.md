@@ -1,6 +1,6 @@
 ---
 name: ponytail
-description: "compose-prompt が作った未承認の設計ドラフトを全設計書横断で監査し、要件へのtraceability、境界を新設しない代替案、原因除去、既存の実行方式の再利用を比較して、過剰な実装計画を削る"
+description: "cowlick が作った未承認の設計ドラフトを全設計書横断で監査し、要件へのtraceability、境界を新設しない代替案、原因除去、既存の実行方式の再利用を比較して、過剰な実装計画を削る"
 allowed-tools: Read, Grep, Glob, Agent
 user-invocable: false
 ---
@@ -27,7 +27,7 @@ user-invocable: false
 
 - 対象は `draft-prompt/` の未承認ドラフトだけとする
 - 本体コード、テスト、設定、依存関係、`.[agent_name]/prompt/` を変更しない
-- compose-prompt の必須ファイル構成と必須 section を壊さない
+- cowlick の必須ファイル構成と必須 section を壊さない
 - ユーザーが preflight で明示的に受け入れた要件や trade-off を、単純化だけを理由に覆さない
 - 単純化で挙動、security、data integrity、互換性が変わる場合は勝手に変更せず、判断が必要な論点として返す
 
@@ -136,4 +136,4 @@ Summary / Changes / 対象ファイル / 参照ルール / 完了条件の必須
 - `consultation_required`: 挙動を変える候補があり、ユーザー判断が必要
 - `blocked`: ドラフトの不整合、要件由来の欠落、委任失敗、根拠不足により監査を完了できない
 
-ponytail は正式反映を行わない。meeting がユーザーの最終承認を得た後だけ、compose-prompt の `apply` mode へ進む。
+ponytail は正式反映を行わない。meeting がユーザーの最終承認を得た後だけ、cowlick の `apply` mode へ進む。
