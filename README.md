@@ -113,6 +113,8 @@ export OPENROUTER_API_KEY="..."
 
 API keyには40 USD以下の月次またはリセットなしhard limitを設定する。固定実行器は使用量38 USDで新規実行を止め、各リクエストでもZDRと学習利用拒否を強制する。キーはリポジトリへ保存しない。
 
+疎通確認は`bash [skills_root]/run-agent/delegate-deepseek.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
+
 通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellをDeepSeekへ許可しない。
 
 テストの穴をDeepSeekが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みシナリオから一意に解決できない場合だけ、ユーザーへシナリオ承認を求め直す。
