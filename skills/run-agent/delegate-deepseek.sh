@@ -58,25 +58,31 @@ if [ "$MODE" != "smoke" ]; then
   [ -f "$SPEC_PATH" ] || fail "spec file not found: $SPEC_PATH"
 fi
 
-RESULT_ROOT=""
-if [ "$MODE" != "smoke" ]; then
-  RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"
-  [ ! -e "$RESULT_ROOT" ] || fail "result already exists: $RESULT_ROOT"
-  mkdir -p "$RESULT_ROOT" || fail "cannot create result directory"
-fi
-
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/delegate-deepseek.XXXXXX") || fail "cannot create temporary directory"
 WORKTREE="$TEMP_ROOT/worktree"
 CURL_CONFIG="$TEMP_ROOT/curl.conf"
 WORKTREE_ADDED=0
+RESULT_ROOT=""
+RESULT_STAGING=""
 
 cleanup() {
   if [ "$WORKTREE_ADDED" -eq 1 ]; then
     git worktree remove --force "$WORKTREE" >/dev/null 2>&1 || true
   fi
+  if [ -n "$RESULT_STAGING" ] && [ -d "$RESULT_STAGING" ]; then
+    rm -rf "$RESULT_STAGING"
+  fi
   rm -rf "$TEMP_ROOT"
 }
 trap cleanup EXIT INT TERM
+
+if [ "$MODE" != "smoke" ]; then
+  RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"
+  [ ! -e "$RESULT_ROOT" ] || fail "result already exists: $RESULT_ROOT"
+  RESULT_PARENT=${RESULT_ROOT%/*}
+  mkdir -p "$RESULT_PARENT" || fail "cannot create result parent directory"
+  RESULT_STAGING=$(mktemp -d "$RESULT_PARENT/.${TASK_ID}.incomplete.XXXXXX") || fail "cannot create staging result directory"
+fi
 
 umask 077
 printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\nfail\n' "$OPENROUTER_API_KEY" > "$CURL_CONFIG" || fail "cannot prepare budget request"
@@ -186,14 +192,14 @@ if [ "$MODE" = "smoke" ]; then
 elif [ "$MODE" = "research" ]; then
   PROMPT="設計案 .deepseek-request/spec.md のためにコードベースを調査してください。変更は禁止です。根拠を file:line で示し、不明点と設計上のリスクを報告してください。"
   EXECUTION_ROOT="$WORKTREE"
-  OPENCODE_OUTPUT="$RESULT_ROOT/opencode.jsonl"
-  OPENCODE_ERROR="$RESULT_ROOT/opencode.stderr"
+  OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
+  OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 else
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
   PROMPT="承認済み設計 .deepseek-request/spec.md に従い、次の本体コードだけを実装してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
   EXECUTION_ROOT="$WORKTREE"
-  OPENCODE_OUTPUT="$RESULT_ROOT/opencode.jsonl"
-  OPENCODE_ERROR="$RESULT_ROOT/opencode.stderr"
+  OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
+  OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 fi
 
 cd "$EXECUTION_ROOT" || fail "cannot enter execution root"
@@ -230,18 +236,25 @@ done < <(git diff --name-only -z)
 while IFS= read -r -d '' changed; do
   CHANGED_PATHS+=("$changed")
 done < <(git ls-files --others --exclude-standard -z)
-for changed in "${CHANGED_PATHS[@]}"; do
-  allowed=false
-  for path in "${ALLOWED_PATHS[@]}"; do
-    [ "$changed" = "$path" ] && allowed=true
+if [ "${#CHANGED_PATHS[@]}" -gt 0 ]; then
+  for changed in "${CHANGED_PATHS[@]}"; do
+    allowed=false
+    if [ "${#ALLOWED_PATHS[@]}" -gt 0 ]; then
+      for path in "${ALLOWED_PATHS[@]}"; do
+        [ "$changed" = "$path" ] && allowed=true
+      done
+    fi
+    [ "$allowed" = true ] || fail "DeepSeek changed a protected path: $changed"
   done
-  [ "$allowed" = true ] || fail "DeepSeek changed a protected path: $changed"
-done
+  CHANGED_PATHS_JSON=$(printf '%s\n' "${CHANGED_PATHS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))') || fail "cannot serialize changed paths"
+else
+  CHANGED_PATHS_JSON='[]'
+fi
 
 if [ "$MODE" = "implement" ]; then
-  git diff --binary -- "${ALLOWED_PATHS[@]}" > "$RESULT_ROOT/candidate.patch" || fail "cannot create candidate patch"
+  git diff --binary -- "${ALLOWED_PATHS[@]}" > "$RESULT_STAGING/candidate.patch" || fail "cannot create candidate patch"
 else
-  : > "$RESULT_ROOT/candidate.patch"
+  : > "$RESULT_STAGING/candidate.patch"
 fi
 
 jq -n \
@@ -252,9 +265,12 @@ jq -n \
   --argjson opencode_status "$OPENCODE_STATUS" \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
-  --argjson changed_paths "$(printf '%s\n' "${CHANGED_PATHS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')" \
+  --argjson changed_paths "$CHANGED_PATHS_JSON" \
   '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths}' \
-  > "$RESULT_ROOT/result.json" || fail "cannot create result metadata"
+  > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
+
+mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"
+RESULT_STAGING=""
 
 printf 'result: %s\n' "$RESULT_ROOT"
 [ "$OPENCODE_STATUS" -eq 0 ] || exit "$OPENCODE_STATUS"
