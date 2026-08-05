@@ -22,7 +22,7 @@ FEATURE_RE='^branch-[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?-prompt\.md$'
 die(){ echo "ERROR: $1" >&2; exit 1; }
 
 [ -L "$SRC_DIR" ] && die "draft dir is a symlink: $SRC_DIR"
-[ -d "$SRC_DIR" ] || die "draft dir not found: $SRC_DIR (compose-prompt で先にドラフトを作ること)"
+[ -d "$SRC_DIR" ] || die "draft dir not found: $SRC_DIR (cowlick で先にドラフトを作ること)"
 [ -f "$SRC_DIR/$INDEX_NAME" ] || die "index not found: $SRC_DIR/$INDEX_NAME"
 
 # ドラフトディレクトリの中身を検査する。index と設計書以外が 1 つでもあれば止める。
