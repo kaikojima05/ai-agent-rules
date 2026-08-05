@@ -7,6 +7,8 @@ readonly HARD_BUDGET_USD="40"
 readonly MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"
 readonly MODEL_ID="~deepseek/deepseek-v4-flash-latest"
 readonly MODEL_VARIANT="high"
+readonly SMOKE_PROMPT="hello"
+readonly SMOKE_ERROR_LINE_LIMIT="20"
 readonly OPENROUTER_KEY_ENDPOINT="https://openrouter.ai/api/v1/key"
 readonly TASK_ID_PATTERN='^[a-z0-9][a-z0-9-]{0,62}$'
 
@@ -35,8 +37,13 @@ validate_repo_path() {
   done
 }
 
-[ "$MODE" = "research" ] || [ "$MODE" = "implement" ] || fail "mode must be research or implement"
-[[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
+case "$MODE" in
+  research|implement) [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case" ;;
+  smoke)
+    [ -z "$TASK_ID" ] && [ -z "$SPEC_PATH" ] && [ "$#" -eq 0 ] || fail "smoke mode does not accept arguments"
+    ;;
+  *) fail "mode must be research, implement, or smoke" ;;
+esac
 command -v git >/dev/null 2>&1 || fail "git is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
@@ -46,12 +53,17 @@ command -v opencode >/dev/null 2>&1 || fail "opencode is required"
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not inside a git repository"
 cd "$REPO_ROOT" || fail "cannot enter repository root"
 
-validate_repo_path "$SPEC_PATH"
-[ -f "$SPEC_PATH" ] || fail "spec file not found: $SPEC_PATH"
+if [ "$MODE" != "smoke" ]; then
+  validate_repo_path "$SPEC_PATH"
+  [ -f "$SPEC_PATH" ] || fail "spec file not found: $SPEC_PATH"
+fi
 
-RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"
-[ ! -e "$RESULT_ROOT" ] || fail "result already exists: $RESULT_ROOT"
-mkdir -p "$RESULT_ROOT" || fail "cannot create result directory"
+RESULT_ROOT=""
+if [ "$MODE" != "smoke" ]; then
+  RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"
+  [ ! -e "$RESULT_ROOT" ] || fail "result already exists: $RESULT_ROOT"
+  mkdir -p "$RESULT_ROOT" || fail "cannot create result directory"
+fi
 
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/delegate-deepseek.XXXXXX") || fail "cannot create temporary directory"
 WORKTREE="$TEMP_ROOT/worktree"
@@ -80,10 +92,12 @@ esac
 jq -ne --argjson usage "$CURRENT_USAGE" --argjson soft "$SOFT_BUDGET_USD" '$usage < $soft' >/dev/null || fail "soft budget exceeded: $CURRENT_USAGE USD"
 jq -ne --argjson limit "$KEY_LIMIT" --argjson hard "$HARD_BUDGET_USD" '$limit <= $hard' >/dev/null || fail "API key hard limit exceeds $HARD_BUDGET_USD USD"
 
-git worktree add --detach "$WORKTREE" HEAD >/dev/null || fail "cannot create isolated worktree"
-WORKTREE_ADDED=1
-mkdir -p "$WORKTREE/.deepseek-request" || fail "cannot create delegated request directory"
-cp "$REPO_ROOT/$SPEC_PATH" "$WORKTREE/.deepseek-request/spec.md" || fail "cannot copy spec into isolated worktree"
+if [ "$MODE" != "smoke" ]; then
+  git worktree add --detach "$WORKTREE" HEAD >/dev/null || fail "cannot create isolated worktree"
+  WORKTREE_ADDED=1
+  mkdir -p "$WORKTREE/.deepseek-request" || fail "cannot create delegated request directory"
+  cp "$REPO_ROOT/$SPEC_PATH" "$WORKTREE/.deepseek-request/spec.md" || fail "cannot copy spec into isolated worktree"
+fi
 
 ALLOWED_PATHS=()
 if [ "$MODE" = "implement" ]; then
@@ -109,27 +123,28 @@ fi
 jq -cn \
   --argjson permission_edit "$EDIT_RULES" \
   --arg model_id "$MODEL_ID" \
-  --arg model_variant "$MODEL_VARIANT" '
+  --arg model_variant "$MODEL_VARIANT" \
+  --arg mode "$MODE" '
   {
     "$schema":"https://opencode.ai/config.json",
     "share":"disabled",
     "permission":{
       "*":"deny",
-      "read":{
-        "*":"allow",
-        "*.env":"deny",
-        "*.env.*":"deny",
-        "**/.env":"deny",
-        "**/.env.*":"deny",
-        ".git/**":"deny",
-        ".codex/**":"deny",
-        ".claude/**":"deny",
-        ".agents/**":"deny"
-      },
-      "glob":"allow",
-      "grep":"allow",
-      "list":"allow",
-      "lsp":"allow",
+      "read":(if $mode == "smoke" then "deny" else {
+          "*":"allow",
+          "*.env":"deny",
+          "*.env.*":"deny",
+          "**/.env":"deny",
+          "**/.env.*":"deny",
+          ".git/**":"deny",
+          ".codex/**":"deny",
+          ".claude/**":"deny",
+          ".agents/**":"deny"
+        } end),
+      "glob":(if $mode == "smoke" then "deny" else "allow" end),
+      "grep":(if $mode == "smoke" then "deny" else "allow" end),
+      "list":(if $mode == "smoke" then "deny" else "allow" end),
+      "lsp":(if $mode == "smoke" then "deny" else "allow" end),
       "edit":$permission_edit,
       "bash":"deny",
       "task":"deny",
@@ -163,14 +178,25 @@ jq -cn \
   }
 ' > "$TEMP_ROOT/opencode.json" || fail "cannot create OpenCode config"
 
-if [ "$MODE" = "research" ]; then
+if [ "$MODE" = "smoke" ]; then
+  PROMPT="$SMOKE_PROMPT"
+  EXECUTION_ROOT="$REPO_ROOT"
+  OPENCODE_OUTPUT="$TEMP_ROOT/opencode.jsonl"
+  OPENCODE_ERROR="$TEMP_ROOT/opencode.stderr"
+elif [ "$MODE" = "research" ]; then
   PROMPT="設計案 .deepseek-request/spec.md のためにコードベースを調査してください。変更は禁止です。根拠を file:line で示し、不明点と設計上のリスクを報告してください。"
+  EXECUTION_ROOT="$WORKTREE"
+  OPENCODE_OUTPUT="$RESULT_ROOT/opencode.jsonl"
+  OPENCODE_ERROR="$RESULT_ROOT/opencode.stderr"
 else
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
   PROMPT="承認済み設計 .deepseek-request/spec.md に従い、次の本体コードだけを実装してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
+  EXECUTION_ROOT="$WORKTREE"
+  OPENCODE_OUTPUT="$RESULT_ROOT/opencode.jsonl"
+  OPENCODE_ERROR="$RESULT_ROOT/opencode.stderr"
 fi
 
-cd "$WORKTREE" || fail "cannot enter isolated worktree"
+cd "$EXECUTION_ROOT" || fail "cannot enter execution root"
 set +e
 env -i \
   HOME="$HOME" \
@@ -180,9 +206,16 @@ env -i \
   OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   OPENCODE_CONFIG="$TEMP_ROOT/opencode.json" \
   OPENCODE_DISABLE_AUTOUPDATE=true \
-  opencode --pure run --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$RESULT_ROOT/opencode.jsonl" 2> "$RESULT_ROOT/opencode.stderr"
+  opencode --pure run --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR"
 OPENCODE_STATUS=$?
 set -e
+
+if [ "$MODE" = "smoke" ]; then
+  [ "$OPENCODE_STATUS" -eq 0 ] || { sed -n "1,${SMOKE_ERROR_LINE_LIMIT}p" "$OPENCODE_ERROR" >&2; fail "smoke request failed with status $OPENCODE_STATUS"; }
+  [ -s "$OPENCODE_OUTPUT" ] || fail "smoke request returned no events"
+  printf 'smoke: ok model=%s variant=%s\n' "$MODEL" "$MODEL_VARIANT"
+  exit 0
+fi
 
 rm -rf "$WORKTREE/.deepseek-request"
 
