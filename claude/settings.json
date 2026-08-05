@@ -69,8 +69,8 @@
     "excludedCommands": [
       "bash .claude/skills/init-agent/init-agent.sh",
       "bash .claude/skills/init-agent/init-agent.sh *",
-      "bash .claude/skills/compose-prompt/apply-prompt.sh",
-      "bash .claude/skills/compose-prompt/apply-prompt.sh *",
+      "bash .claude/skills/cowlick/apply-prompt.sh",
+      "bash .claude/skills/cowlick/apply-prompt.sh *",
       "bash .claude/skills/run-agent/mark-prompt-done.sh",
       "bash .claude/skills/run-agent/mark-prompt-done.sh *",
       "bash .claude/skills/run-agent/delegate-deepseek.sh",
