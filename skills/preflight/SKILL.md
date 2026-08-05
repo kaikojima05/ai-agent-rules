@@ -1,6 +1,6 @@
 ---
 name: preflight
-description: "新規機能、既存機能の修正、別リポジトリからの移植などの要件を compose-prompt へ渡す前に、コードベースを読み取り専用で調査し、既存機能との衝突、副作用、暗黙の前提、移植元の問題、未決定事項を洗い出す"
+description: "新規機能、既存機能の修正、別リポジトリからの移植などの要件を cowlick へ渡す前に、コードベースを読み取り専用で調査し、既存機能との衝突、副作用、暗黙の前提、移植元の問題、未決定事項を洗い出す"
 allowed-tools: Read, Grep, Glob, Agent
 user-invocable: false
 ---
@@ -108,6 +108,6 @@ user-invocable: false
 
 結果を次の status とともに meeting へ返す:
 
-- `preflight_ready`: 重大な未決定事項がなく、compose-prompt へ渡せる
+- `preflight_ready`: 重大な未決定事項がなく、cowlick へ渡せる
 - `consultation_required`: ユーザー判断が必要な論点がある
 - `blocked`: 委任手段、参照先、根拠が不足し、監査を続行できない
