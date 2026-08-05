@@ -69,10 +69,20 @@ check_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
   "rg --no-messages -n 'foo|bar' front --glob '!generated/**'" \
   normalize-readonly-search.sh \
   '{"tool_name":"Bash","tool_input":{"command":"rg -n '\''foo|bar'\'' front --glob '\''!generated/**'\'' 2>/dev/null"}}'
+check_rewrite "readonly-search: rgとsortの安全なpipelineを許可" \
+  "rg --no-messages --files draft-prompt .codex/rules rules | sort" \
+  normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"rg --files draft-prompt .codex/rules rules 2>/dev/null | sort"}}'
+check_rewrite "readonly-search: stderr操作なしのsortも許可" \
+  "rg --files src | sort" \
+  normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"rg --files src | sort"}}'
 check "readonly-search: stdout書き込みは棄権" empty normalize-readonly-search.sh \
   '{"tool_name":"Bash","tool_input":{"command":"rg foo > result.txt 2>/dev/null"}}'
 check "readonly-search: 複合コマンドは棄権" empty normalize-readonly-search.sh \
   '{"tool_name":"Bash","tool_input":{"command":"rg foo; rm target 2>/dev/null"}}'
+check "readonly-search: sort以外のpipelineは棄権" empty normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"rg foo 2>/dev/null | tee result.txt"}}'
 check "readonly-search: command substitutionは棄権" empty normalize-readonly-search.sh \
   '{"tool_name":"Bash","tool_input":{"command":"rg $(danger) 2>/dev/null"}}'
 
