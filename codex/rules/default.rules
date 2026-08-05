@@ -24,6 +24,17 @@ prefix_rule(
     justification = "予算・ZDR・編集先を固定検証してDeepSeekを隔離worktreeで実行します。",
 )
 prefix_rule(
+    pattern = ["bash", ".agents/skills/run-agent/delegate-deepseek.sh", "smoke"],
+    decision = "prompt",
+    justification = "従量課金の下位モデルへhelloを送るsmoke testを実行するか確認します。",
+    match = [
+        "bash .agents/skills/run-agent/delegate-deepseek.sh smoke",
+    ],
+    not_match = [
+        "bash .agents/skills/run-agent/delegate-deepseek.sh research task-id spec.md",
+    ],
+)
+prefix_rule(
     pattern = ["bash", ".agents/skills/e2e/apply-e2e-plan.sh"],
     decision = "allow",
     justification = "確認済み計画を固定の.codex/e2e/.e2e.mdへ反映します。",
