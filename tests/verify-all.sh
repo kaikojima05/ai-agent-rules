@@ -106,15 +106,15 @@ grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny
 
 echo "== 設計pipelineのskill境界 =="
 MEETING_SKILL="$REPO/skills/meeting/SKILL.md"
-DESIGN_PREFLIGHT_SKILL="$REPO/skills/design-preflight/SKILL.md"
+PREFLIGHT_SKILL="$REPO/skills/preflight/SKILL.md"
 COMPOSE_PROMPT_SKILL="$REPO/skills/compose-prompt/SKILL.md"
 PONYTAIL_SKILL="$REPO/skills/ponytail/SKILL.md"
-for SKILL_FILE in "$MEETING_SKILL" "$DESIGN_PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTAIL_SKILL"; do
+for SKILL_FILE in "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTAIL_SKILL"; do
   [ -f "$SKILL_FILE" ] && ok "design skill存在: $(basename "$(dirname "$SKILL_FILE")")" || ng "design skill不在: $SKILL_FILE"
 done
-grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq '  - Skill(design-preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(compose-prompt *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && ok "meetingだけをユーザー起動・質問担当にする" || ng "meetingの起動・質問・skill境界が不正"
-grep -q 'design-preflight → compose-prompt draft → ponytail' "$MEETING_SKILL" && ok "meetingの基本順序" || ng "meetingの基本順序が不正"
-for INTERNAL_SKILL in "$DESIGN_PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTAIL_SKILL"; do
+grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq '  - Skill(preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(compose-prompt *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && ok "meetingだけをユーザー起動・質問担当にする" || ng "meetingの起動・質問・skill境界が不正"
+grep -q 'preflight → compose-prompt draft → ponytail' "$MEETING_SKILL" && ok "meetingの基本順序" || ng "meetingの基本順序が不正"
+for INTERNAL_SKILL in "$PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTAIL_SKILL"; do
   grep -q '^user-invocable: false$' "$INTERNAL_SKILL" && ok "内部skillをmenuから隠す: $(basename "$(dirname "$INTERNAL_SKILL")")" || ng "内部skillがユーザー起動可能: $INTERNAL_SKILL"
   if grep -q '^disable-model-invocation: true$' "$INTERNAL_SKILL"; then
     ng "内部skillをmodelが呼べない: $INTERNAL_SKILL"
@@ -122,19 +122,27 @@ for INTERNAL_SKILL in "$DESIGN_PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTA
     ok "内部skillをmodelが呼べる: $(basename "$(dirname "$INTERNAL_SKILL")")"
   fi
 done
-if sed -n '1,/^---$/p' "$DESIGN_PREFLIGHT_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|Bash|AskUserQuestion)'; then
-  ng "design-preflightに書き込みtoolがある"
+if sed -n '1,/^---$/p' "$PREFLIGHT_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|Bash|AskUserQuestion)'; then
+  ng "preflightに書き込みtoolがある"
 else
-  ok "design-preflightは読み取り専用"
+  ok "preflightは読み取り専用"
 fi
 if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|Bash|AskUserQuestion)'; then
   ng "ponytailが広域書き込み・Bash・質問toolを事前許可"
 else
   ok "ponytailは調査toolだけを事前許可"
 fi
-grep -q 'DeepSeek など利用可能な下位モデル' "$DESIGN_PREFLIGHT_SKILL" && grep -q 'DeepSeek など利用可能な下位モデル' "$PONYTAIL_SKILL" && ok "調査を下位モデルへ委任" || ng "下位モデル委任の記述漏れ"
-grep -q 'YAGNI' "$PONYTAIL_SKILL" && grep -q '<input type="date">' "$PONYTAIL_SKILL" && grep -q 'JS より CSS' "$PONYTAIL_SKILL" && ok "ponytailの単純化原則" || ng "ponytailの単純化原則が不足"
+grep -q 'DeepSeek など利用可能な下位モデル' "$PREFLIGHT_SKILL" && grep -q 'DeepSeek など利用可能な下位モデル' "$PONYTAIL_SKILL" && ok "調査を下位モデルへ委任" || ng "下位モデル委任の記述漏れ"
+grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
+grep -q '設計書ごと削除' "$COMPOSE_PROMPT_SKILL" && grep -q '境界を新設しない基準案' "$COMPOSE_PROMPT_SKILL" && grep -q '設計選択同士' "$COMPOSE_PROMPT_SKILL" && ok "compose-promptの最小draft契約" || ng "compose-promptの最小draft契約が不足"
+grep -q '## 必須監査成果物' "$PONYTAIL_SKILL" && grep -Fq '**横断 topology**' "$PONYTAIL_SKILL" && grep -Fq '**最小代替案**' "$PONYTAIL_SKILL" && grep -Fq '**原因・緩和対**' "$PONYTAIL_SKILL" && grep -q '何も削らなかった場合' "$PONYTAIL_SKILL" && grep -q '次をすべて満たすまで.*ponytail_ready' "$PONYTAIL_SKILL" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
+grep -q 'ponytail_ready.*文字列だけでは通過させない' "$MEETING_SKILL" && grep -q '最小代替案との比較' "$MEETING_SKILL" && grep -q '原因・緩和対の削除確認' "$MEETING_SKILL" && ok "meetingのponytail成果物検証" || ng "meetingがponytailのstatusだけを信用している"
 grep -q 'draft_ready.*停止' "$COMPOSE_PROMPT_SKILL" && grep -q 'Step 4: apply mode' "$COMPOSE_PROMPT_SKILL" && grep -q '`draft_conflict`' "$COMPOSE_PROMPT_SKILL" && ok "compose-promptのdraft/applyと既存draft境界" || ng "compose-promptのmode・draft境界が不正"
+if [ -d "$REPO/skills/design-preflight" ] || command grep -rn 'design-preflight' "$REPO/README.md" "$REPO/skills" >/dev/null 2>&1; then
+  ng "旧design-preflight参照が残存"
+else
+  ok "旧design-preflight参照なし"
+fi
 if [ -f "$REPO/skills/design-pipeline/SKILL.md" ] || command grep -rn 'design-pipeline' "$REPO/README.md" "$REPO/skills" >/dev/null 2>&1; then
   ng "旧design-pipeline参照が残存"
 else
