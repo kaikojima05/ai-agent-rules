@@ -1,19 +1,43 @@
 #!/bin/bash
-# PreToolUse(Bash) hook: rg の stderr 破棄を --no-messages へ正規化する。
+# PreToolUse(Bash) hook: rg の stderr 破棄と安全な sort pipeline を正規化する。
 # Why: 2>/dev/null があると Codex は shell wrapper を静的に分解できず、読み取り専用の
 #      コード探索でも承認を要求する。rg 自身の同等 option へ置き換えれば、危険な
-#      shell wrapper の prompt 規則を緩めずに不要な承認だけを除去できる。
+#      shell wrapper の prompt 規則を緩めずに不要な承認だけを除去できる。sort だけを
+#      後続させる pipeline も構成要素を限定検証できるため、同じ入口で許可する。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 [ "$(hook_tool_name)" = "Bash" ] || exit 0
 CMD=$(hook_command)
 [ -z "$CMD" ] && exit 0
 
-# stderr だけを /dev/null へ捨てる末尾形に限定する。stdout のリダイレクトは書き込みに
-# なり得るため正規化せず、既存の approval / sandbox 判定へ委ねる。
+# stderr だけを /dev/null へ捨てる形と、後続が引数なし sort だけの形に限定する。
+# stdout のリダイレクトや他の pipeline は書き込み・副作用を持ち得るため正規化せず、
+# 既存の approval / sandbox 判定へ委ねる。
+SUPPRESS_MESSAGES=0
+SORT_SUFFIX=
 case "$CMD" in
-  rg\ *" 2>/dev/null") BASE_CMD=${CMD%" 2>/dev/null"} ;;
-  rg\ *" 2> /dev/null") BASE_CMD=${CMD%" 2> /dev/null"} ;;
+  rg\ *" 2>/dev/null | sort")
+    BASE_CMD=${CMD%" 2>/dev/null | sort"}
+    SUPPRESS_MESSAGES=1
+    SORT_SUFFIX=" | sort"
+    ;;
+  rg\ *" 2> /dev/null | sort")
+    BASE_CMD=${CMD%" 2> /dev/null | sort"}
+    SUPPRESS_MESSAGES=1
+    SORT_SUFFIX=" | sort"
+    ;;
+  rg\ *" | sort")
+    BASE_CMD=${CMD%" | sort"}
+    SORT_SUFFIX=" | sort"
+    ;;
+  rg\ *" 2>/dev/null")
+    BASE_CMD=${CMD%" 2>/dev/null"}
+    SUPPRESS_MESSAGES=1
+    ;;
+  rg\ *" 2> /dev/null")
+    BASE_CMD=${CMD%" 2> /dev/null"}
+    SUPPRESS_MESSAGES=1
+    ;;
   *) exit 0 ;;
 esac
 
@@ -49,9 +73,12 @@ if ! printf '%s\n' "$BASE_CMD" | awk '
   exit 0
 fi
 
-case " $BASE_CMD " in
-  *" --no-messages "*) NORMALIZED_CMD=$BASE_CMD ;;
-  *) NORMALIZED_CMD="rg --no-messages${BASE_CMD#rg}" ;;
-esac
+NORMALIZED_CMD=$BASE_CMD
+if [ "$SUPPRESS_MESSAGES" -eq 1 ]; then
+  case " $BASE_CMD " in
+    *" --no-messages "*) ;;
+    *) NORMALIZED_CMD="rg --no-messages${BASE_CMD#rg}" ;;
+  esac
+fi
 
-hook_rewrite_command "$NORMALIZED_CMD"
+hook_rewrite_command "$NORMALIZED_CMD$SORT_SUFFIX"
