@@ -22,6 +22,17 @@ check() { # name expect(deny|ask|empty) hook json
   else FAIL=$((FAIL+1)); echo "FAIL $1 -> [$OUT]"; fi
 }
 
+check_rewrite() { # name expected-command hook json
+  OUT=$(run "$3" "$4")
+  ACTUAL_DECISION=$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)
+  ACTUAL_COMMAND=$(echo "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command' 2>/dev/null)
+  if [ "$ACTUAL_DECISION" = "allow" ] && [ "$ACTUAL_COMMAND" = "$2" ]; then
+    PASS=$((PASS+1)); echo "ok   $1"
+  else
+    FAIL=$((FAIL+1)); echo "FAIL $1 -> decision=[$ACTUAL_DECISION] command=[$ACTUAL_COMMAND]"
+  fi
+}
+
 # --- require-test ---
 mkdir -p src && rm -f src/foo.ts src/foo.test.ts src/bar.tsx
 check "require-test: テスト無し ts は deny"   deny  require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
@@ -52,6 +63,18 @@ check "history-rewrite: git commit は棄権"    empty deny-history-rewrite.sh '
 check "inline-eval: python3 -c は deny"       deny  deny-inline-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 -c import_os"}}'
 check "inline-eval: node -e は deny"          deny  deny-inline-eval.sh '{"tool_name":"Bash","tool_input":{"command":"node -e code"}}'
 check "inline-eval: python3 foo.py は棄権"    empty deny-inline-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 foo.py"}}'
+
+# --- normalize-readonly-search ---
+check_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
+  "rg --no-messages -n 'foo|bar' front --glob '!generated/**'" \
+  normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"rg -n '\''foo|bar'\'' front --glob '\''!generated/**'\'' 2>/dev/null"}}'
+check "readonly-search: stdout書き込みは棄権" empty normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"rg foo > result.txt 2>/dev/null"}}'
+check "readonly-search: 複合コマンドは棄権" empty normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"rg foo; rm target 2>/dev/null"}}'
+check "readonly-search: command substitutionは棄権" empty normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"rg $(danger) 2>/dev/null"}}'
 
 # --- deny-registry-fetch ---
 check "registry-fetch: npx は deny"           deny  deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"npx create-app"}}'
