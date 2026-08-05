@@ -95,6 +95,11 @@ bash [skills_root]/run-agent/delegate-deepseek.sh research <task-id> <設計書>
 
 # 隔離worktreeで本体コードだけ実装
 bash [skills_root]/run-agent/delegate-deepseek.sh implement <task-id> <設計書> <許可する本体コード>...
+
+# OpenCode・OpenRouter・対象モデルへの疎通だけ確認
+bash [skills_root]/run-agent/delegate-deepseek.sh smoke
 ```
 
 実行器はOpenRouterの対象期間使用量38 USDで停止し、API keyに40 USD以下の月次またはリセットなしhard limitがあることを検証する。ZDRと`data_collection: deny`をリクエストでも強制し、OpenCodeの外部プラグインを無効化する。
+
+`smoke`は従量課金のリクエストなので、通常の回帰テストでは実行せずデフォルトでスキップする。疎通確認が必要な場合も、実行するかスキップするかをユーザーへ一度だけ質問し、明示的に実行を選んだ後だけ呼ぶ。固定promptの`hello`だけを送り、下位モデルのtool権限をすべて拒否し、応答は一時領域から外へ残さない。CodexのrulesとClaude Codeのpermissionも、このmodeだけを毎回確認へ倒す。
