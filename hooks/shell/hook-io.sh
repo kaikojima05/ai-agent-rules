@@ -108,6 +108,14 @@ hook_deny() {
   exit 0
 }
 
+# Bash コマンドを副作用のない等価表現へ正規化して実行を続ける関数。
+# updatedInput は allow 決定と同時に返す必要があるため、呼び出し側で JSON を組ませない。
+hook_rewrite_command() {
+  jq -n --arg c "$1" \
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":$c}}}'
+  exit 0
+}
+
 # 人間の確認を要求する関数。Claude は ask 決定を返せるが、Codex の PreToolUse は
 # permissionDecision=ask を未サポートで、hook failure としてツール実行を継続してしまう。
 # Codex の確認操作は .codex/rules へ定義し、誤配線時は deny に倒して fail-open を防ぐ。
