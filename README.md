@@ -20,9 +20,9 @@ ai-agent-rules/
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
 │   ├── init-agent/         # placeholder（[agent_name] / [skills_root]）と [NOTE] の解決
 │   ├── meeting/            # 要件監査・設計作成・単純化を統括するユーザー向け入口
-│   ├── design-preflight/   # 要件の穴と既存機能との衝突を設計前に調査
+│   ├── preflight/          # 要件の由来・既存経路・境界ゼロ案を設計前に調査
 │   ├── compose-prompt/     # 機能ごとの未承認設計ドラフトを作成
-│   ├── ponytail/           # YAGNI・既存機能再利用の観点で設計を単純化
+│   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
 │   ├── run-agent/          # 設計書1枚を選び、DeepSeek実装を統括して停止
 │   ├── tdd-run/            # シナリオ承認後、テスト・委任実装・レビューを連続実行
 │   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
@@ -99,11 +99,11 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 $init-agent codex
 ```
 
-設計作成では `meeting` だけをユーザー向け入口として呼び出す。エージェントが `design-preflight → compose-prompt draft → ponytail → compose-prompt apply` を必要に応じて再実行し、ユーザーにはコードベースから判定できない設計判断だけを一度に一つ確認する。
+設計作成では `meeting` だけをユーザー向け入口として呼び出す。エージェントが `preflight → compose-prompt draft → ponytail → compose-prompt apply` を必要に応じて再実行し、ユーザーにはコードベースから判定できない設計判断だけを一度に一つ確認する。`ponytail` は設計書ごとの成立確認ではなく、全設計書のruntime topologyを平坦化し、境界を新設しない代替案との比較と要件への対応付けが完了するまで設計をreadyにしない。
 
 ### DeepSeekへの調査・実装委任
 
-`design-preflight`、`compose-prompt`、`ponytail`、`run-agent`は、コードベースの探索をDeepSeekなどの下位モデルへ委任する。上位モデルは調査項目の設計、重要根拠の再確認、要件と設計の判断、テスト、レビュー、Gitを担当し、下位モデルには読み取り調査または許可された本体コードの編集だけを委任する。固定実行器を使う場合はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+`preflight`、`compose-prompt`、`ponytail`、`run-agent`は、コードベースの探索をDeepSeekなどの下位モデルへ委任する。上位モデルは調査項目の設計、重要根拠の再確認、要件と設計の判断、テスト、レビュー、Gitを担当し、下位モデルには読み取り調査または許可された本体コードの編集だけを委任する。固定実行器を使う場合はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
