@@ -106,7 +106,10 @@ if [ "$MODE" = "implement" ]; then
   done
 fi
 
-PERMISSION_EDIT="$EDIT_RULES" MODEL_ID="$MODEL_ID" MODEL_VARIANT="$MODEL_VARIANT" MODE="$MODE" jq -cn '
+jq -cn \
+  --argjson permission_edit "$EDIT_RULES" \
+  --arg model_id "$MODEL_ID" \
+  --arg model_variant "$MODEL_VARIANT" '
   {
     "$schema":"https://opencode.ai/config.json",
     "share":"disabled",
@@ -127,7 +130,7 @@ PERMISSION_EDIT="$EDIT_RULES" MODEL_ID="$MODEL_ID" MODEL_VARIANT="$MODEL_VARIANT
       "grep":"allow",
       "list":"allow",
       "lsp":"allow",
-      "edit":(env.PERMISSION_EDIT | fromjson),
+      "edit":$permission_edit,
       "bash":"deny",
       "task":"deny",
       "external_directory":"deny",
@@ -140,17 +143,17 @@ PERMISSION_EDIT="$EDIT_RULES" MODEL_ID="$MODEL_ID" MODEL_VARIANT="$MODEL_VARIANT
     "provider":{
       "openrouter":{
         "models":{
-          (env.MODEL_ID):{
+          ($model_id):{
             "options":{
-              "reasoningEffort":env.MODEL_VARIANT,
+              "reasoningEffort":$model_variant,
               "provider":{
                 "zdr":true,
                 "data_collection":"deny"
               }
             },
             "variants":{
-              (env.MODEL_VARIANT):{
-                "reasoningEffort":env.MODEL_VARIANT
+              ($model_variant):{
+                "reasoningEffort":$model_variant
               }
             }
           }
