@@ -23,11 +23,15 @@ mode がない、または上記以外なら何も変更せず `invalid_mode` �
 
 ### Step 2: draft mode で初期ドラフトを作成する
 
-`draft` mode では、同じ要件 revision に対する design-preflight の `preflight_ready` が現在の会話にあることを確認する。結果がない、対象範囲が変わった、または重大な論点が未回答なら何も作らず `preflight_required` を返す。
+`draft` mode では、同じ要件 revision に対する preflight の `preflight_ready` が現在の会話にあることを確認する。結果がない、対象範囲が変わった、または重大な論点が未回答なら何も作らず `preflight_required` を返す。
+
+preflight が付けた **明示要件**、**禁止・制約**、**受入済み trade-off**、**既存制約**だけを設計上の固定条件として使う。**設計選択**は候補であり、そのまま要件へ昇格させない。禁止された手段に関連する別手段を、積極要件へ読み替えない。
 
 `draft-prompt/` が既に存在する場合は、現在の要件 revision に対する直前の draft revision だと会話から確認できる場合だけ Edit で更新する。別要件の残骸、所有者不明、または対応する revision がない場合は一切触れず `draft_conflict` を meeting へ返す。
 
 整理された要件を元に、[agent_name]がプロンプトの初期ドラフトを作成する。この時点では未承認であり、`.[agent_name]/prompt/`へ反映しない。
+
+設計書へ分割する前に、全体の既存実行経路と新設予定の実行・永続化・運用境界を一列に並べる。preflight の「境界を新設しない基準案」と比較し、基準案が要件を満たすならそれを初期ドラフトにする。新しい public endpoint、queue、scheduler、worker、serverless function、外部接続、global/shared 変更は、基準案が満たせない明示要件または既存制約がある場合だけ追加する。
 
 ドラフトは「後述の構成の一式」を **プロジェクトルートの `draft-prompt/`** に作る（`.prompt.md` + `branch-<機能名>-prompt.md` × N）。
 ディレクトリの中身はこの 2 種類だけにすること。メモや作業ファイルを同居させると Step 5 のスクリプトが弾く。
@@ -47,12 +51,16 @@ bash [skills_root]/run-agent/delegate-deepseek.sh research <task-id> draft-promp
 
 - DeepSeekは読み取り専用とし、コード、テスト、設計ドラフトを変更させない
 - 調査結果は`file:line`の根拠、不明点、設計リスクとして返させる
+- 各設計書について、設計書ごと削除できる既存経路、新しいendpointやruntime resourceを使わない入口、既存のdeployment・scheduling・failure recovery patternを探させる
+- ドラフトの新設要素が別の新しい失敗モードと緩和策を生んでいる場合は、原因側と緩和策をまとめて消せる反証を探させる
 - [agent_name]が重要な根拠を実ファイルで再確認する。DeepSeekの自己申告だけで設計へ採用しない
 - 調査失敗、予算超過、ZDR対応先なしの場合は理由と未調査範囲を含む `research_blocked` を meeting へ返し、推測で穴埋めしない
 
 調査結果を踏まえて[agent_name]がドラフトを更新する。要件 revision と異なる判断が必要ならユーザーへ直接質問せず、選択肢、挙動差、推奨を含む `consultation_required` を meeting へ返す。
 
-調査を反映し、未決定事項がなければ、対象ファイル名と内容で識別できる draft revision とともに `draft_ready` を返して停止する。ponytail、最終承認、正式反映へ続けて進まない。
+調査を反映した後、全設計書をもう一度横断して、新設境界とglobal/shared変更のそれぞれが明示要件または既存制約へ直接対応していること、境界を新設しない基準案では満たせない根拠があることを確認する。設計選択同士の依存だけで必要性を説明している要素を残さない。
+
+この横断確認を満たし、未決定事項がなければ、対象ファイル名と内容で識別できる draft revision とともに `draft_ready` を返して停止する。ponytail、最終承認、正式反映へ続けて進まない。
 
 ### Step 4: apply mode の前提を確認する
 
