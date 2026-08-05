@@ -77,6 +77,10 @@ check_rewrite "readonly-search: stderr操作なしのsortも許可" \
   "rg --files src | sort" \
   normalize-readonly-search.sh \
   '{"tool_name":"Bash","tool_input":{"command":"rg --files src | sort"}}'
+check_rewrite "readonly-search: 読み取り専用findとsortを許可" \
+  "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null | sort" \
+  normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null | sort"}}'
 check "readonly-search: stdout書き込みは棄権" empty normalize-readonly-search.sh \
   '{"tool_name":"Bash","tool_input":{"command":"rg foo > result.txt 2>/dev/null"}}'
 check "readonly-search: 複合コマンドは棄権" empty normalize-readonly-search.sh \
@@ -85,6 +89,12 @@ check "readonly-search: sort以外のpipelineは棄権" empty normalize-readonly
   '{"tool_name":"Bash","tool_input":{"command":"rg foo 2>/dev/null | tee result.txt"}}'
 check "readonly-search: command substitutionは棄権" empty normalize-readonly-search.sh \
   '{"tool_name":"Bash","tool_input":{"command":"rg $(danger) 2>/dev/null"}}'
+check "readonly-search: find deleteは棄権" empty normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"find tmp -type f -delete 2>/dev/null | sort"}}'
+check "readonly-search: quoteで分割したfind actionは棄権" empty normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"find tmp \"-de\"\"lete\" 2>/dev/null | sort"}}'
+check "readonly-search: findからsort以外へのpipelineは棄権" empty normalize-readonly-search.sh \
+  '{"tool_name":"Bash","tool_input":{"command":"find tmp -type f -print 2>/dev/null | tee result.txt"}}'
 
 # --- deny-registry-fetch ---
 check "registry-fetch: npx は deny"           deny  deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"npx create-app"}}'
