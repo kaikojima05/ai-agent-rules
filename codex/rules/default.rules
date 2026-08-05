@@ -9,7 +9,7 @@ prefix_rule(
     justification = "配置済みCodex設定のplaceholderを決定的スクリプトで解決します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/compose-prompt/apply-prompt.sh"],
+    pattern = ["bash", ".agents/skills/cowlick/apply-prompt.sh"],
     decision = "allow",
     justification = "確認済みドラフトをdraft-prompt/から固定の.codex/prompt/へ移します。",
 )
