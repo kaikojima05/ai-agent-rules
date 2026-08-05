@@ -107,14 +107,14 @@ grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny
 echo "== 設計pipelineのskill境界 =="
 MEETING_SKILL="$REPO/skills/meeting/SKILL.md"
 PREFLIGHT_SKILL="$REPO/skills/preflight/SKILL.md"
-COMPOSE_PROMPT_SKILL="$REPO/skills/compose-prompt/SKILL.md"
+COWLICK_SKILL="$REPO/skills/cowlick/SKILL.md"
 PONYTAIL_SKILL="$REPO/skills/ponytail/SKILL.md"
-for SKILL_FILE in "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTAIL_SKILL"; do
+for SKILL_FILE in "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
   [ -f "$SKILL_FILE" ] && ok "design skill存在: $(basename "$(dirname "$SKILL_FILE")")" || ng "design skill不在: $SKILL_FILE"
 done
-grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq '  - Skill(preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(compose-prompt *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && ok "meetingだけをユーザー起動・質問担当にする" || ng "meetingの起動・質問・skill境界が不正"
-grep -q 'preflight → compose-prompt draft → ponytail' "$MEETING_SKILL" && ok "meetingの基本順序" || ng "meetingの基本順序が不正"
-for INTERNAL_SKILL in "$PREFLIGHT_SKILL" "$COMPOSE_PROMPT_SKILL" "$PONYTAIL_SKILL"; do
+grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq '  - Skill(preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(cowlick *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && ok "meetingだけをユーザー起動・質問担当にする" || ng "meetingの起動・質問・skill境界が不正"
+grep -q 'preflight → cowlick draft → ponytail' "$MEETING_SKILL" && ok "meetingの基本順序" || ng "meetingの基本順序が不正"
+for INTERNAL_SKILL in "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
   grep -q '^user-invocable: false$' "$INTERNAL_SKILL" && ok "内部skillをmenuから隠す: $(basename "$(dirname "$INTERNAL_SKILL")")" || ng "内部skillがユーザー起動可能: $INTERNAL_SKILL"
   if grep -q '^disable-model-invocation: true$' "$INTERNAL_SKILL"; then
     ng "内部skillをmodelが呼べない: $INTERNAL_SKILL"
@@ -134,20 +134,18 @@ else
 fi
 grep -q 'DeepSeek など利用可能な下位モデル' "$PREFLIGHT_SKILL" && grep -q 'DeepSeek など利用可能な下位モデル' "$PONYTAIL_SKILL" && ok "調査を下位モデルへ委任" || ng "下位モデル委任の記述漏れ"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
-grep -q '設計書ごと削除' "$COMPOSE_PROMPT_SKILL" && grep -q '境界を新設しない基準案' "$COMPOSE_PROMPT_SKILL" && grep -q '設計選択同士' "$COMPOSE_PROMPT_SKILL" && ok "compose-promptの最小draft契約" || ng "compose-promptの最小draft契約が不足"
+grep -q '設計書ごと削除' "$COWLICK_SKILL" && grep -q '境界を新設しない基準案' "$COWLICK_SKILL" && grep -q '設計選択同士' "$COWLICK_SKILL" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -q '## 必須監査成果物' "$PONYTAIL_SKILL" && grep -Fq '**横断 topology**' "$PONYTAIL_SKILL" && grep -Fq '**最小代替案**' "$PONYTAIL_SKILL" && grep -Fq '**原因・緩和対**' "$PONYTAIL_SKILL" && grep -q '何も削らなかった場合' "$PONYTAIL_SKILL" && grep -q '次をすべて満たすまで.*ponytail_ready' "$PONYTAIL_SKILL" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
 grep -q 'ponytail_ready.*文字列だけでは通過させない' "$MEETING_SKILL" && grep -q '最小代替案との比較' "$MEETING_SKILL" && grep -q '原因・緩和対の削除確認' "$MEETING_SKILL" && ok "meetingのponytail成果物検証" || ng "meetingがponytailのstatusだけを信用している"
-grep -q 'draft_ready.*停止' "$COMPOSE_PROMPT_SKILL" && grep -q 'Step 4: apply mode' "$COMPOSE_PROMPT_SKILL" && grep -q '`draft_conflict`' "$COMPOSE_PROMPT_SKILL" && ok "compose-promptのdraft/applyと既存draft境界" || ng "compose-promptのmode・draft境界が不正"
-if [ -d "$REPO/skills/design-preflight" ] || command grep -rn 'design-preflight' "$REPO/README.md" "$REPO/skills" >/dev/null 2>&1; then
-  ng "旧design-preflight参照が残存"
-else
-  ok "旧design-preflight参照なし"
-fi
-if [ -f "$REPO/skills/design-pipeline/SKILL.md" ] || command grep -rn 'design-pipeline' "$REPO/README.md" "$REPO/skills" >/dev/null 2>&1; then
-  ng "旧design-pipeline参照が残存"
-else
-  ok "旧design-pipeline参照なし"
-fi
+grep -q 'draft_ready.*停止' "$COWLICK_SKILL" && grep -q 'Step 4: apply mode' "$COWLICK_SKILL" && grep -q '`draft_conflict`' "$COWLICK_SKILL" && ok "cowlickのdraft/applyと既存draft境界" || ng "cowlickのmode・draft境界が不正"
+GROUP_FAILURES=
+for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
+  [ ! -d "$REPO/skills/$LEGACY_DESIGN_SKILL" ] || append_group_failure "旧directory: skills/$LEGACY_DESIGN_SKILL"
+  if command grep -rn "$LEGACY_DESIGN_SKILL" "$REPO/README.md" "$REPO/skills" "$REPO/codex" "$REPO/claude" >/dev/null 2>&1; then
+    append_group_failure "旧reference: $LEGACY_DESIGN_SKILL"
+  fi
+done
+report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 
 echo "== 2. claude 配置シミュレーション =="
 mkdir -p "$S/claude-sim/.claude"
@@ -165,8 +163,8 @@ grep -q 'bash .claude/skills/rebase-squash/rebase-squash.sh' .claude/skills/reba
 LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
 [ "$LEFT" = "0" ] && ok "置換漏れゼロ(claude)" || { ng "置換漏れ $LEFT 件(claude)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude | grep -v '/init-agent/'; }
 
-echo "== 2.5 compose-prompt / run-agent の設計書フロー（claude 配置） =="
-AP=".claude/skills/compose-prompt/apply-prompt.sh"
+echo "== 2.5 cowlick / run-agent の設計書フロー（claude 配置） =="
+AP=".claude/skills/cowlick/apply-prompt.sh"
 MD=".claude/skills/run-agent/mark-prompt-done.sh"
 mkdir -p draft-prompt
 printf '# 実装順\n\n- [ ] branch-user-api-prompt.md\n- [ ] branch-user-form-prompt.md\n' > draft-prompt/.prompt.md
@@ -433,7 +431,7 @@ if command -v codex >/dev/null 2>&1; then
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: e2e plan の固定経路を allow" || ng "rules: e2e plan 判定失敗 out=[$OUT]"
   # 引数なしで呼ぶ apply-prompt.sh が rules に一致するか（引数前提の書き方だと取りこぼす）
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/compose-prompt/apply-prompt.sh 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/cowlick/apply-prompt.sh 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 引数なし apply-prompt を allow" || ng "rules: apply-prompt 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/run-agent/mark-prompt-done.sh user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
@@ -532,7 +530,7 @@ done
 report_group "Claude serena: code変更toolを全件deny" "$GROUP_FAILURES"
 jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
-for SC in init-agent/init-agent.sh compose-prompt/apply-prompt.sh run-agent/mark-prompt-done.sh run-agent/delegate-deepseek.sh e2e/apply-e2e-plan.sh; do
+for SC in init-agent/init-agent.sh cowlick/apply-prompt.sh run-agent/mark-prompt-done.sh run-agent/delegate-deepseek.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
   jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }
