@@ -1,9 +1,9 @@
 ---
 name: meeting
-description: "ユーザーの要件を受け取り、preflight、compose-prompt、ponytail を必要に応じて呼び分け、ユーザーにはコードベースから決められない事項だけを尋ねながら、要件監査から最小設計の承認・正式反映までを統括する"
+description: "ユーザーの要件を受け取り、preflight、cowlick、ponytail を必要に応じて呼び分け、ユーザーにはコードベースから決められない事項だけを尋ねながら、要件監査から最小設計の承認・正式反映までを統括する"
 allowed-tools:
   - Skill(preflight)
-  - Skill(compose-prompt *)
+  - Skill(cowlick *)
   - Skill(ponytail)
   - AskUserQuestion
 disable-model-invocation: true
@@ -19,13 +19,13 @@ disable-model-invocation: true
 基本順序は次とする:
 
 ```
-preflight → compose-prompt draft → ponytail → ユーザー承認 → compose-prompt apply
+preflight → cowlick draft → ponytail → ユーザー承認 → cowlick apply
 ```
 
 - **preflight**: 要件の由来、既存機能との衝突、副作用、既存の実行方式、境界を新設しない基準案を読み取り専用で洗い出す
-- **compose-prompt draft**: 確定した要件から未承認の設計ドラフトを作り、下位モデルのコードベース調査を反映する
+- **cowlick draft**: 確定した要件から未承認の設計ドラフトを作り、下位モデルのコードベース調査を反映する
 - **ponytail**: ドラフトから不要な機能、重複実装、不要な依存、過剰な表現を削る
-- **compose-prompt apply**: 最終承認済みのドラフトだけを正式反映する
+- **cowlick apply**: 最終承認済みのドラフトだけを正式反映する
 
 後段で前提が崩れた場合は、影響する phase まで戻す。
 
@@ -45,7 +45,7 @@ preflight → compose-prompt draft → ponytail → ユーザー承認 → compo
 ファイルへ進行状態を書かず、現在の会話で次を管理する:
 
 - 要件 revision: 目的、対象範囲、要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用
-- draft revision: compose-prompt が最後に作成・更新したドラフト
+- draft revision: cowlick が最後に作成・更新したドラフト
 - ponytail revision: ponytail が監査成果物とready gateで最小と確認した draft revision
 - 最終承認: ユーザーが承認した ponytail revision
 
@@ -63,11 +63,11 @@ preflight → compose-prompt draft → ponytail → ユーザー承認 → compo
 
 同じ要件 revision について有効な結果がなければ preflight を実行する。
 
-preflight が未決定事項を返した場合は、最も影響の大きい一件だけをユーザーへ質問する。回答を新しい制約として preflight を再実行し、新しい穴や矛盾がないか確認する。要件由来、既存の実行方式、境界を新設しない基準案が揃い、重大な未決定事項がなくなるまで compose-prompt へ進まない。
+preflight が未決定事項を返した場合は、最も影響の大きい一件だけをユーザーへ質問する。回答を新しい制約として preflight を再実行し、新しい穴や矛盾がないか確認する。要件由来、既存の実行方式、境界を新設しない基準案が揃い、重大な未決定事項がなくなるまで cowlick へ進まない。
 
-### Step 3: compose-prompt draft を実行する
+### Step 3: cowlick draft を実行する
 
-preflight の要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用、未確認事項、コード根拠を入力として、compose-prompt の `draft` mode を実行する。
+preflight の要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用、未確認事項、コード根拠を入力として、cowlick の `draft` mode を実行する。
 
 - 要件の前提が崩れた場合は Step 2 へ戻す
 - 設計上の判断が必要なら、一件だけユーザーへ質問して `draft` mode を再実行する
@@ -97,9 +97,9 @@ preflight の要件由来、既存の実行方式、境界を新設しない基�
 
 ユーザーが現在の ponytail revision を承認するまで正式反映しない。フィードバックがあれば影響範囲に応じて Step 2、3、4 のいずれかへ戻す。
 
-### Step 6: compose-prompt apply を実行する
+### Step 6: cowlick apply を実行する
 
-最終承認後だけ compose-prompt の `apply` mode を実行する。`apply` mode が確認する draft revision と、ユーザーが承認した ponytail revision が一致しなければ反映させない。
+最終承認後だけ cowlick の `apply` mode を実行する。`apply` mode が確認する draft revision と、ユーザーが承認した ponytail revision が一致しなければ反映させない。
 
 完了時は、ユーザーが行った重要な判断、ponytail で省略した事項、正式反映した設計書を報告する。内部の全 tool call や調査ログは列挙しない。
 
