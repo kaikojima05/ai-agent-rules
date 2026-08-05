@@ -1,5 +1,5 @@
 ---
-name: compose-prompt
+name: cowlick
 description: "meeting から draft または apply mode で呼ばれ、確定要件から未承認の設計ドラフトを作るか、ponytail 後に最終承認された同一 revision を @.[agent_name]/prompt/ へ正式反映する"
 allowed-tools: Read, Write, Edit, Bash
 user-invocable: false
@@ -77,7 +77,7 @@ bash [skills_root]/run-agent/delegate-deepseek.sh research <task-id> draft-promp
 Step 4 を満たした場合だけ、専用スクリプトでドラフトを反映する。**引数は取らない** — 移動元（`draft-prompt/`）・宛先（`.[agent_name]/prompt/`）・受け入れるファイル名（`.prompt.md` と `branch-<機能名>-prompt.md`）がすべてスクリプト内に固定されているため、サンドボックス外実行の事前 allow はこの経路 1 本に限定される。
 
 ```
-bash [skills_root]/compose-prompt/apply-prompt.sh
+bash [skills_root]/cowlick/apply-prompt.sh
 ```
 
 - スクリプトは反映前に「中身が index と設計書だけか」「index が並べた設計書と実体が 1:1 で対応するか」を検証し、1 つでも外れたら宛先に触れずに終了する
@@ -93,7 +93,7 @@ bash [skills_root]/compose-prompt/apply-prompt.sh
     - `cd ... &&` を前置する、`&&` `;` `|` で他のコマンドと繋ぐ — 複合コマンドは区切り文字で分割され、**各サブコマンドが個別に**照合される。繋いだ相手が許可されていなければプロンプトが出る
     - `> log 2>&1` などのリダイレクトを付ける — リダイレクト先の解決可否によってはプロンプトに倒れる
 - 「Operation not permitted」で失敗した場合は、まず呼び出しが上記の相対パス形式かを確認し、違っていれば形式を直して再実行する。相対パス形式でも失敗する場合のみ `excludedCommands` 未設定の古い配置と判断し、sandbox を無効化して再実行のうえ `settings.json` の更新をユーザーに案内すること
-- Codex では `distributed` permission profile が `.codex` を保護し、`.codex/rules/default.rules` が `bash .agents/skills/compose-prompt/apply-prompt.sh` だけを sandbox 外で allow する。失敗時は迂回せず、project の信頼と rules 配置を確認すること
+- Codex では `distributed` permission profile が `.codex` を保護し、`.codex/rules/default.rules` が `bash .agents/skills/cowlick/apply-prompt.sh` だけを sandbox 外で allow する。失敗時は迂回せず、project の信頼と rules 配置を確認すること
 
 ## 成果物の構成
 
@@ -136,7 +136,7 @@ bash [skills_root]/compose-prompt/apply-prompt.sh
 
 - 並び順 = 実装順。依存がある場合は依存される側を先に置く
 - `- [ ] <ファイル名>` 以外の形式で書くと apply-prompt.sh が弾く（見出しや説明文の行は自由）
-- `[x]` に倒すのは run-agent の仕事。compose-prompt では全件 `[ ]` で出す
+- `[x]` に倒すのは run-agent の仕事。cowlick では全件 `[ ]` で出す
 
 ### 設計書（branch-<機能名>-prompt.md）のテンプレート
 
