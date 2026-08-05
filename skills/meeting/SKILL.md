@@ -1,8 +1,8 @@
 ---
 name: meeting
-description: "ユーザーの要件を受け取り、design-preflight、compose-prompt、ponytail を必要に応じて呼び分け、ユーザーにはコードベースから決められない事項だけを尋ねながら、要件監査から最小設計の承認・正式反映までを統括する"
+description: "ユーザーの要件を受け取り、preflight、compose-prompt、ponytail を必要に応じて呼び分け、ユーザーにはコードベースから決められない事項だけを尋ねながら、要件監査から最小設計の承認・正式反映までを統括する"
 allowed-tools:
-  - Skill(design-preflight)
+  - Skill(preflight)
   - Skill(compose-prompt *)
   - Skill(ponytail)
   - AskUserQuestion
@@ -19,10 +19,10 @@ disable-model-invocation: true
 基本順序は次とする:
 
 ```
-design-preflight → compose-prompt draft → ponytail → ユーザー承認 → compose-prompt apply
+preflight → compose-prompt draft → ponytail → ユーザー承認 → compose-prompt apply
 ```
 
-- **design-preflight**: 要件の穴、既存機能との衝突、副作用、未決定事項を読み取り専用で洗い出す
+- **preflight**: 要件の由来、既存機能との衝突、副作用、既存の実行方式、境界を新設しない基準案を読み取り専用で洗い出す
 - **compose-prompt draft**: 確定した要件から未承認の設計ドラフトを作り、下位モデルのコードベース調査を反映する
 - **ponytail**: ドラフトから不要な機能、重複実装、不要な依存、過剰な表現を削る
 - **compose-prompt apply**: 最終承認済みのドラフトだけを正式反映する
@@ -44,9 +44,9 @@ design-preflight → compose-prompt draft → ponytail → ユーザー承認 �
 
 ファイルへ進行状態を書かず、現在の会話で次を管理する:
 
-- 要件 revision: 目的、対象範囲、既存機能との関係、受け入れた副作用
+- 要件 revision: 目的、対象範囲、要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用
 - draft revision: compose-prompt が最後に作成・更新したドラフト
-- ponytail revision: ponytail が最後に確認した draft revision
+- ponytail revision: ponytail が監査成果物とready gateで最小と確認した draft revision
 - 最終承認: ユーザーが承認した ponytail revision
 
 古い revision の調査結果、単純化結果、承認を新しい revision に流用しない。
@@ -59,15 +59,15 @@ design-preflight → compose-prompt draft → ponytail → ユーザー承認 �
 
 最初から完全な仕様を聞き出そうとしない。コードベース調査で消える質問までユーザーへ投げない。
 
-### Step 2: design-preflight を収束させる
+### Step 2: preflight を収束させる
 
-同じ要件 revision について有効な結果がなければ design-preflight を実行する。
+同じ要件 revision について有効な結果がなければ preflight を実行する。
 
-design-preflight が未決定事項を返した場合は、最も影響の大きい一件だけをユーザーへ質問する。回答を新しい制約として design-preflight を再実行し、新しい穴や矛盾がないか確認する。重大な未決定事項がなくなるまで compose-prompt へ進まない。
+preflight が未決定事項を返した場合は、最も影響の大きい一件だけをユーザーへ質問する。回答を新しい制約として preflight を再実行し、新しい穴や矛盾がないか確認する。要件由来、既存の実行方式、境界を新設しない基準案が揃い、重大な未決定事項がなくなるまで compose-prompt へ進まない。
 
 ### Step 3: compose-prompt draft を実行する
 
-design-preflight の確定要件、受け入れた副作用、未確認事項、コード根拠を入力として、compose-prompt の `draft` mode を実行する。
+preflight の要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用、未確認事項、コード根拠を入力として、compose-prompt の `draft` mode を実行する。
 
 - 要件の前提が崩れた場合は Step 2 へ戻す
 - 設計上の判断が必要なら、一件だけユーザーへ質問して `draft` mode を再実行する
@@ -83,14 +83,15 @@ design-preflight の確定要件、受け入れた副作用、未確認事項、
 - 回答で設計または完了条件が変われば Step 3 へ戻す
 - ponytail が新しい実装要素を加えた場合は Step 3 のコードベース調査からやり直す
 
-未決定事項がなく、ponytail revision が現在の draft revision と一致するまで最終承認へ進まない。
+`ponytail_ready` の文字列だけでは通過させない。全設計書の横断topology、最小代替案との比較、新設要素と要件の対応、原因・緩和対の削除確認、残した主要要素の根拠が揃い、未決定事項がなく、ponytail revision が現在の draft revision と一致するまで最終承認へ進まない。
 
 ### Step 5: 最終承認を得る
 
 現在のドラフト一式と次をユーザーへ示す:
 
 - 確定した設計の範囲
-- design-preflight で受け入れた副作用
+- preflight で受け入れた副作用
+- ponytail が比較した最小代替案と、残したruntime boundaryの根拠
 - ponytail で省略または再利用へ置き換えた項目
 - 未確認のまま残すとユーザーが明示した事項
 
