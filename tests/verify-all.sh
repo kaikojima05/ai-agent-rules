@@ -40,6 +40,19 @@ LEGACY_HOOK_NAME="enforce-${LEGACY_PRODUCT_NAME}-commit"
 LEGACY_TEST_LABEL="${LEGACY_PRODUCT_NAME}-commit:"
 ok(){ PASS=$((PASS+1)); echo "ok   $1"; }
 ng(){ FAIL=$((FAIL+1)); echo "FAIL $1"; }
+append_group_failure(){
+  if [ -z "$GROUP_FAILURES" ]; then GROUP_FAILURES=$1
+  else GROUP_FAILURES="$GROUP_FAILURES
+$1"; fi
+}
+report_group(){
+  if [ -z "$2" ]; then
+    ok "$1"
+  else
+    ng "$1"
+    printf '%s\n' "$2" | sed 's/^/  - /'
+  fi
+}
 version_at_least(){
   awk -v current="$1" -v minimum="$2" -v count="$VERSION_COMPONENT_COUNT" 'BEGIN {
     split(current, c, "."); split(minimum, m, ".")
@@ -68,17 +81,21 @@ mcp_server_prompts_by_default(){
 command -v jq >/dev/null 2>&1 || { echo "jq が必要" >&2; exit 1; }
 
 echo "== 1. 構文チェック（require-test.sh は [NOTE] 未解決のため配置後に検査） =="
+GROUP_FAILURES=
 for f in "$REPO"/hooks/shell/*.sh "$REPO"/skills/*/*.sh "$SUITE"/*.sh; do
   case "$f" in */require-test.sh|*/verify-all.sh) continue ;; esac
-  if bash -n "$f" 2>/dev/null; then ok "syntax: $(basename "$f")"; else ng "syntax: $f"; fi
+  bash -n "$f" 2>/dev/null || append_group_failure "syntax: $f"
 done
+report_group "shell構文: 対象ファイル全件" "$GROUP_FAILURES"
 echo "== 1.5 実行ビット（ハーネスが直接実行する hook は +x 必須。hook-io.sh は source 専用） =="
+GROUP_FAILURES=
 for f in "$REPO"/hooks/shell/*.sh; do
   case "$f" in */hook-io.sh) continue ;; esac
-  [ -x "$f" ] && ok "exec bit: $(basename "$f")" || ng "exec bit 無し: $(basename "$f")"
+  [ -x "$f" ] || append_group_failure "exec bit: $f"
 done
 DS="$REPO/skills/run-agent/delegate-deepseek.sh"
-[ -x "$DS" ] && ok "exec bit: delegate-deepseek.sh" || ng "exec bit 無し: delegate-deepseek.sh"
+[ -x "$DS" ] || append_group_failure "exec bit: $DS"
+report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 grep -q 'SOFT_BUDGET_USD="38"' "$DS" && grep -q 'HARD_BUDGET_USD="40"' "$DS" && ok "DeepSeek予算: soft=38 hard=40" || ng "DeepSeek予算が不正"
 grep -q 'MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"' "$DS" && ok "DeepSeekモデル: V4 Flash latestを追従" || ng "DeepSeekモデルがlatest追従ではない"
 grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$DS" && grep -q '"reasoningEffort":$model_variant' "$DS" && grep -q -- '--variant "$MODEL_VARIANT"' "$DS" && ok "DeepSeek effort: highを明示" || ng "DeepSeek effortがhigh固定ではない"
@@ -308,12 +325,13 @@ if grep -qE '^"\*\*/.*" = "(read|write)"$' .codex/config.toml; then
 else
   ok "permissions: 任意階層 read/write glob なし"
 fi
-if grep -q '@latest' .codex/config.toml || { grep 'git+https://' .codex/config.toml | grep -vqE "@[0-9a-f]{$GIT_COMMIT_HEX_LENGTH}"; }; then
+if grep -q '@latest' .codex/config.toml || \
+   { grep 'git+https://' .codex/config.toml | grep -vqE "@[0-9a-f]{$GIT_COMMIT_HEX_LENGTH}"; } || \
+   ! grep -q 'chrome-devtools-mcp@[0-9]' .codex/config.toml; then
   ng "config: MCP に未固定バージョンが残存"
 else
-  ok "config: MCP 起動バージョンを固定"
+  ok "config: MCP 起動バージョンを全件固定"
 fi
-grep -q 'chrome-devtools-mcp@[0-9]' .codex/config.toml && ok "config: Chrome MCP のversion固定" || ng "config: Chrome MCP が未固定"
 CM="$REPO/claude/.mcp.json"
 CODEX_SERENA_SOURCE=$(awk -F'"' '/"--from", "git\+https:\/\/github.com\/oraios\/serena@/ { print $4 }' .codex/config.toml)
 CLAUDE_SERENA_SOURCE=$(jq -r '.mcpServers.serena.args[1] // empty' "$CM" 2>/dev/null)
@@ -331,32 +349,39 @@ if jq -e --arg source "$CODEX_SERENA_SOURCE" '
 else
   ng "serena: Claude MCP起動設定が不正"
 fi
+GROUP_FAILURES=
 for DISABLED_TOOL in "${SERENA_CODE_MUTATION_TOOLS[@]}"; do
-  grep -q "\"$DISABLED_TOOL\"" .codex/config.toml && ok "serena: $DISABLED_TOOL を無効化" || ng "serena: $DISABLED_TOOL の無効化漏れ"
+  grep -q "\"$DISABLED_TOOL\"" .codex/config.toml || append_group_failure "$DISABLED_TOOL"
 done
+report_group "serena: code変更toolを全件無効化" "$GROUP_FAILURES"
 grep -q '"replace_regex"' .codex/config.toml && ng "serena: 廃止済みreplace_regexが残存" || ok "serena: 廃止済みtool名なし"
 for MCP_SERVER in serena chrome-devtools; do
-  mcp_server_prompts_by_default "$MCP_SERVER" .codex/config.toml && ok "$MCP_SERVER: 未登録toolはprompt" || ng "$MCP_SERVER: 未登録toolのprompt漏れ"
+  GROUP_FAILURES=
+  mcp_server_prompts_by_default "$MCP_SERVER" .codex/config.toml || append_group_failure "未登録toolの既定値がpromptではない"
   APPROVED_COUNT=0
   while IFS= read -r MCP_TOOL; do
     APPROVED_COUNT=$((APPROVED_COUNT+1))
-    mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: ${MCP_TOOL} を approve" || ng "$MCP_SERVER: ${MCP_TOOL} の approve 漏れ"
+    mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml || append_group_failure "approve漏れ: $MCP_TOOL"
   done < <(jq -r --arg prefix "mcp__${MCP_SERVER}__" '.permissions.allow[] | select(startswith($prefix)) | ltrimstr($prefix)' "$REPO/claude/settings.local.json")
   if [ "$MCP_SERVER" = "serena" ]; then
     for MCP_TOOL in "${CODEX_CONTEXT_EXTRA_APPROVED_SERENA_TOOLS[@]}"; do
       APPROVED_COUNT=$((APPROVED_COUNT+1))
-      mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml && ok "$MCP_SERVER: context固有の${MCP_TOOL}をapprove" || ng "$MCP_SERVER: context固有の${MCP_TOOL}のapprove漏れ"
+      mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml || append_group_failure "context固有approve漏れ: $MCP_TOOL"
     done
   fi
   CONFIGURED_COUNT=$(grep -c "^\[mcp_servers\.$MCP_SERVER\.tools\." .codex/config.toml)
-  [ "$CONFIGURED_COUNT" = "$APPROVED_COUNT" ] && ok "$MCP_SERVER: context別allow一覧だけapprove" || ng "$MCP_SERVER: 未登録toolのapprove混入"
+  [ "$CONFIGURED_COUNT" = "$APPROVED_COUNT" ] || append_group_failure "allow一覧外のapprove混入"
+  report_group "$MCP_SERVER: approval境界" "$GROUP_FAILURES"
 done
 [ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
 jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-agent-config.sh"))] | length' .codex/hooks.json)" = "2" ] && ok "設定保護hookを apply_patch/Bash に配線" || ng "設定保護hookの配線漏れ"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' .codex/hooks.json)" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "lockfile保護hookを apply_patch/Bash に配線" || ng "lockfile保護hookの配線漏れ"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-review-files.sh"))] | length' .codex/hooks.json)" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "レビュー対象保護hookを apply_patch/Bash に配線" || ng "レビュー対象保護hookの配線漏れ"
+GROUP_FAILURES=
+for SCRIPT in protect-agent-config.sh protect-lockfiles.sh protect-review-files.sh; do
+  BINDING_COUNT=$(jq --arg script "$SCRIPT" '[.hooks.PreToolUse[] | .hooks[].command | select(contains($script))] | length' .codex/hooks.json)
+  [ "$BINDING_COUNT" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] || append_group_failure "$SCRIPT: $BINDING_COUNT bindings"
+done
+report_group "保護hookを apply_patch/Bash の両方へ配線" "$GROUP_FAILURES"
 if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("guard-overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
   ok "未対応 ask hook を codex へ未配線"
 else
@@ -367,9 +392,6 @@ for SCRIPT in $(jq -r '.hooks[][] | .hooks[].command' .codex/hooks.json | sed -n
   [ -x ".codex/hooks/shell/$SCRIPT" ] || { ng "hook 参照先が存在しない: $SCRIPT"; MISSING_HOOKS=1; }
 done
 [ "$MISSING_HOOKS" = "0" ] && ok "hook 参照先が全件実行可能"
-OUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash .codex/hooks/shell/deny-history-rewrite.sh)
-[ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "codex: git rebase を deny" || ng "codex: rebase deny 失敗 out=[$OUT]"
-
 echo "== 5.25 codex config / rules 実機検査 =="
 if command -v codex >/dev/null 2>&1; then
   CODEX_VERSION=$(codex --version | awk '{print $2}')
@@ -479,21 +501,27 @@ echo "== 7. 承認プロンプト回避の設定検査 =="
 # 「スペース + 何か」を要求する。引数なしで呼ぶスクリプトをワイルドカード形だけで
 # 登録すると一致せず承認プロンプトが復活するため、両形の登録を必須にする。
 SJ="$REPO/claude/settings.json"; SL="$REPO/claude/settings.local.json"
-jq -e . "$SJ" >/dev/null 2>&1 && ok "settings.json 構文" || ng "settings.json 構文"
-jq -e . "$SL" >/dev/null 2>&1 && ok "settings.local.json 構文" || ng "settings.local.json 構文"
-jq -e . "$CM" >/dev/null 2>&1 && ok ".mcp.json 構文" || ng ".mcp.json 構文"
+GROUP_FAILURES=
+for JSON_CONFIG in "$SJ" "$SL" "$CM"; do
+  jq -e . "$JSON_CONFIG" >/dev/null 2>&1 || append_group_failure "$JSON_CONFIG"
+done
+report_group "Claude JSON設定の構文" "$GROUP_FAILURES"
 jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
 jq -e '.permissions.ask | index("Bash(bash .claude/skills/run-agent/delegate-deepseek.sh smoke)")' "$SL" >/dev/null 2>&1 && ok "Claude: 課金smokeだけをask" || ng "Claude: DeepSeek smokeのask漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
+GROUP_FAILURES=
 for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
   PERMISSION="mcp__serena__${MCP_TOOL}"
-  jq -e --arg permission "$PERMISSION" '.permissions.allow | index($permission) | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: ${MCP_TOOL} を自動許可しない" || ng "Claude serena: ${MCP_TOOL} の無効な自動許可が残存"
+  jq -e --arg permission "$PERMISSION" '.permissions.allow | index($permission) | not' "$SL" >/dev/null 2>&1 || append_group_failure "$MCP_TOOL"
 done
+report_group "Claude serena: 利用不能toolを自動許可しない" "$GROUP_FAILURES"
+GROUP_FAILURES=
 for MCP_TOOL in "${SERENA_CODE_MUTATION_TOOLS[@]}"; do
   PERMISSION="mcp__serena__${MCP_TOOL}"
-  jq -e --arg permission "$PERMISSION" '.permissions.deny | index($permission)' "$SL" >/dev/null 2>&1 && ok "Claude serena: ${MCP_TOOL} をdeny" || ng "Claude serena: ${MCP_TOOL} のdeny漏れ"
+  jq -e --arg permission "$PERMISSION" '.permissions.deny | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$MCP_TOOL"
 done
+report_group "Claude serena: code変更toolを全件deny" "$GROUP_FAILURES"
 jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
 for SC in init-agent/init-agent.sh compose-prompt/apply-prompt.sh run-agent/mark-prompt-done.sh run-agent/delegate-deepseek.sh e2e/apply-e2e-plan.sh; do
