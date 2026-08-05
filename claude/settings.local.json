@@ -63,6 +63,7 @@
       "Bash(truncate:*)",
       "Bash(tee:*)",
       "Bash(bash .claude/skills/rebase-squash/rebase-squash.sh:*)",
+      "Bash(bash .claude/skills/run-agent/delegate-deepseek.sh smoke)",
       "Edit(**/package.json)",
       "Edit(.github/workflows/**)",
       "Edit(**/migrations/**)",
