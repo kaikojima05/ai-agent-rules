@@ -1,9 +1,9 @@
 #!/bin/bash
-# PreToolUse(Bash) hook: 読み取り検索の stderr 破棄と安全な sort pipeline を正規化する。
+# PreToolUse(Bash) hook: 安全な読み取り検索を正規化し、複合 shell を分割させる。
 # Why: 2>/dev/null があると Codex は shell wrapper を静的に分解できず、読み取り専用の
 #      コード探索でも承認を要求する。rg は自身の同等 option へ置き換え、find は変更系
-#      action を拒否してから許可すれば、opaque shell の prompt 規則を緩めずに不要な
-#      承認だけを除去できる。
+#      action を拒否してから許可する。それ以外の loop・条件分岐・pipeline は承認へ
+#      送らず拒否し、単一コマンドへ分割させる。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 [ "$(hook_tool_name)" = "Bash" ] || exit 0
@@ -37,6 +37,49 @@ has_safe_shell_syntax() {
       if (state != "plain" || escaped) valid = 0
       exit(valid ? 0 : 1)
     }
+  '
+}
+
+has_compound_shell_syntax() {
+  printf '%s\n' "$1" | awk '
+    BEGIN { compound = 0; state = "plain"; escaped = 0; sq = sprintf("%c", 39) }
+    NR != 1 { compound = 1 }
+    {
+      for (i = 1; i <= length($0); i++) {
+        ch = substr($0, i, 1)
+        next_ch = substr($0, i + 1, 1)
+        prev_ch = i > 1 ? substr($0, i - 1, 1) : ""
+        if (state == "single") {
+          if (ch == sq) state = "plain"
+          continue
+        }
+        if (state == "double") {
+          if (escaped) { escaped = 0; continue }
+          if (ch == "\\") { escaped = 1; continue }
+          if (ch == "\"") { state = "plain"; continue }
+          if (ch == "`" || (ch == "$" && next_ch == "(")) compound = 1
+          continue
+        }
+        if (escaped) { escaped = 0; continue }
+        if (ch == "\\") { escaped = 1; continue }
+        if (ch == sq) { state = "single"; continue }
+        if (ch == "\"") { state = "double"; continue }
+        if (ch == ";" || ch == "|" || ch == "`" || ch == "(" || ch == ")") compound = 1
+        if (ch == "&" && prev_ch != ">") compound = 1
+        if (ch == "$" && next_ch == "(") compound = 1
+      }
+    }
+    END {
+      if (state != "plain" || escaped) compound = 1
+      exit(compound ? 0 : 1)
+    }
+  '
+}
+
+invokes_inline_shell() {
+  printf '%s\n' "$1" | awk '
+    /^[[:space:]]*(\/bin\/)?(bash|zsh|sh)[[:space:]]+-[[:alnum:]]*c([[:space:]]|$)/ { found = 1 }
+    END { exit(found ? 0 : 1) }
   '
 }
 
@@ -86,54 +129,63 @@ normalize_readonly_find() {
   hook_rewrite_command "$base_command$command_suffix"
 }
 
-case "$CMD" in
-  find\ *)
-    normalize_readonly_find "$CMD"
-    exit 0
-    ;;
-esac
+normalize_readonly_rg() {
+  local rg_command=$1
+  local base_command
+  local normalized_command
+  local sort_suffix=
+  local suppress_messages=0
 
-# stderr だけを /dev/null へ捨てる形と、後続が引数なし sort だけの形に限定する。
-# stdout のリダイレクトや他の pipeline は書き込み・副作用を持ち得るため正規化せず、
-# 既存の approval / sandbox 判定へ委ねる。
-SUPPRESS_MESSAGES=0
-SORT_SUFFIX=
-case "$CMD" in
-  rg\ *" 2>/dev/null | sort")
-    BASE_CMD=${CMD%" 2>/dev/null | sort"}
-    SUPPRESS_MESSAGES=1
-    SORT_SUFFIX=" | sort"
-    ;;
-  rg\ *" 2> /dev/null | sort")
-    BASE_CMD=${CMD%" 2> /dev/null | sort"}
-    SUPPRESS_MESSAGES=1
-    SORT_SUFFIX=" | sort"
-    ;;
-  rg\ *" | sort")
-    BASE_CMD=${CMD%" | sort"}
-    SORT_SUFFIX=" | sort"
-    ;;
-  rg\ *" 2>/dev/null")
-    BASE_CMD=${CMD%" 2>/dev/null"}
-    SUPPRESS_MESSAGES=1
-    ;;
-  rg\ *" 2> /dev/null")
-    BASE_CMD=${CMD%" 2> /dev/null"}
-    SUPPRESS_MESSAGES=1
-    ;;
-  *) exit 0 ;;
-esac
-
-# 末尾の redirection 以外にも shell 構文がある場合は書き換えない。single quote 内の
-# regex や --glob は shell 展開されないため許可し、double quote 内の展開は拒否する。
-has_safe_shell_syntax "$BASE_CMD" || exit 0
-
-NORMALIZED_CMD=$BASE_CMD
-if [ "$SUPPRESS_MESSAGES" -eq 1 ]; then
-  case " $BASE_CMD " in
-    *" --no-messages "*) ;;
-    *) NORMALIZED_CMD="rg --no-messages${BASE_CMD#rg}" ;;
+  # stderr だけを /dev/null へ捨てる形と、後続が引数なし sort だけの形に限定する。
+  # stdout のリダイレクトや他の pipeline は安全な例外として扱わない。
+  case "$rg_command" in
+    rg\ *" 2>/dev/null | sort")
+      base_command=${rg_command%" 2>/dev/null | sort"}
+      suppress_messages=1
+      sort_suffix=" | sort"
+      ;;
+    rg\ *" 2> /dev/null | sort")
+      base_command=${rg_command%" 2> /dev/null | sort"}
+      suppress_messages=1
+      sort_suffix=" | sort"
+      ;;
+    rg\ *" | sort")
+      base_command=${rg_command%" | sort"}
+      sort_suffix=" | sort"
+      ;;
+    rg\ *" 2>/dev/null")
+      base_command=${rg_command%" 2>/dev/null"}
+      suppress_messages=1
+      ;;
+    rg\ *" 2> /dev/null")
+      base_command=${rg_command%" 2> /dev/null"}
+      suppress_messages=1
+      ;;
+    *) return ;;
   esac
+
+  # single quote 内の regex や --glob は shell 展開されないため許可し、double quote 内の
+  # 展開や末尾以外の shell 構文があれば安全な例外として扱わない。
+  has_safe_shell_syntax "$base_command" || return
+
+  normalized_command=$base_command
+  if [ "$suppress_messages" -eq 1 ]; then
+    case " $base_command " in
+      *" --no-messages "*) ;;
+      *) normalized_command="rg --no-messages${base_command#rg}" ;;
+    esac
+  fi
+
+  hook_rewrite_command "$normalized_command$sort_suffix"
+}
+
+case "$CMD" in
+  find\ *) normalize_readonly_find "$CMD" ;;
+  rg\ *) normalize_readonly_rg "$CMD" ;;
+esac
+
+if has_compound_shell_syntax "$CMD" || invokes_inline_shell "$CMD"; then
+  hook_deny "複数コマンドを shell loop・条件分岐・pipeline に集約してはいけません。Read/Grep/Glob または副作用を静的判定できる単一コマンドへ分割してください。複雑な処理はレビュー済み固定スクリプトへ移してください。"
 fi
 
-hook_rewrite_command "$NORMALIZED_CMD$SORT_SUFFIX"
+exit 0
