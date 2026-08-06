@@ -1,9 +1,8 @@
 #!/bin/bash
-# PreToolUse(Bash) hook: 安全な読み取り検索を正規化し、複合 shell を分割させる。
-# Why: 2>/dev/null があると Codex は shell wrapper を静的に分解できず、読み取り専用の
-#      コード探索でも承認を要求する。rg は自身の同等 option へ置き換え、find は変更系
-#      action を拒否してから許可する。それ以外の loop・条件分岐・pipeline は承認へ
-#      送らず拒否し、単一コマンドへ分割させる。
+# PreToolUse(Bash) hook: shell commandを単一の読み取り実行へ制限する。
+# Why: pipelineごとの安全例外は組み合わせの数だけ増える。loop・条件分岐・pipeline・
+#      subshellは一律拒否し、危険optionもコマンド単体で拒否する。/dev/nullへの出力だけは
+#      検証済みの読み取りコマンドに限って許可し、不要な承認と不要な診断出力を避ける。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 [ "$(hook_tool_name)" = "Bash" ] || exit 0
@@ -78,114 +77,111 @@ has_compound_shell_syntax() {
 
 invokes_inline_shell() {
   printf '%s\n' "$1" | awk '
-    /^[[:space:]]*(\/bin\/)?(bash|zsh|sh)[[:space:]]+-[[:alnum:]]*c([[:space:]]|$)/ { found = 1 }
+    {
+      is_shell = $0 ~ /^[[:space:]]*((\/usr\/bin\/)?env[[:space:]]+)?(\/(usr\/)?bin\/)?(bash|zsh|sh)[[:space:]]+/
+      has_command_flag = $0 ~ /[[:space:]]-[[:alnum:]]*c([[:space:]]|$)/
+      if (is_shell && has_command_flag) found = 1
+    }
     END { exit(found ? 0 : 1) }
   '
 }
 
-normalize_readonly_find() {
-  local find_command=$1
-  local base_command
-  local command_suffix
+deny_dangerous_read_options() {
+  local command_without_quote_splits
 
-  case "$find_command" in
-    find\ *" 2>/dev/null | sort")
-      base_command=${find_command%" 2>/dev/null | sort"}
-      command_suffix=" 2>/dev/null | sort"
-      ;;
-    find\ *" 2> /dev/null | sort")
-      base_command=${find_command%" 2> /dev/null | sort"}
-      command_suffix=" 2>/dev/null | sort"
-      ;;
-    find\ *" | sort")
-      base_command=${find_command%" | sort"}
-      command_suffix=" | sort"
-      ;;
-    find\ *" 2>/dev/null")
-      base_command=${find_command%" 2>/dev/null"}
-      command_suffix=" 2>/dev/null"
-      ;;
-    find\ *" 2> /dev/null")
-      base_command=${find_command%" 2> /dev/null"}
-      command_suffix=" 2>/dev/null"
-      ;;
-    *) return ;;
-  esac
+  # shellが連結するquoteとbackslashを除いてからoptionを見る。例えば
+  # find "-de""lete" や find -de\lete で検査を迂回させない。
+  command_without_quote_splits=$(printf '%s\n' "$1" | tr -d "\"'" | tr -d '\\')
 
-  has_safe_shell_syntax "$base_command" || return
+  if printf '%s\n' "$command_without_quote_splits" | grep -Eq '^[[:space:]]*([^[:space:]]*/)?find[[:space:]]' && \
+     printf '%s\n' "$command_without_quote_splits" | grep -Eq -- '(^|[[:space:]])-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)([[:space:]]|$)'; then
+    hook_deny "findの削除・任意command実行・file出力actionは禁止です。読み取り専用の-printを使い、書き込みや削除は明示的な単一commandとして承認を受けてください。"
+  fi
 
-  # quote の連結で action 名を分割すると文字列検査を回避できるため、find だけは quote を
-  # 許可しない。空白を含む path は承認側へ戻し、安全判定できる単純形だけを扱う。
-  case "$base_command" in
-    *"'"*|*'"'*) return ;;
-  esac
+  if printf '%s\n' "$command_without_quote_splits" | grep -Eq '^[[:space:]]*([^[:space:]]*/)?sort[[:space:]]' && \
+     printf '%s\n' "$command_without_quote_splits" | grep -Eq -- '(^|[[:space:]])(-o([^[:space:]]*)?|--output([=[:space:]]|$)|--compress-program([=[:space:]]|$))'; then
+    hook_deny "sortのfile出力・外部program実行optionは禁止です。sortは標準出力への読み取り専用実行に限定してください。"
+  fi
 
-  # find の変更系 action と任意コマンド実行を拒否する。部分一致による false positive は
-  # 自動許可を狭めるだけなので、安全側に倒して既存の approval 判定へ委ねる。
-  case "$base_command" in
-    *-delete*|*-exec*|*-ok*|*-fprint*|*-fprintf*|*-fls*) return ;;
-  esac
+  if printf '%s\n' "$command_without_quote_splits" | grep -Eq '^[[:space:]]*([^[:space:]]*/)?rg[[:space:]]' && \
+     printf '%s\n' "$command_without_quote_splits" | grep -Eq -- '(^|[[:space:]])--pre([=[:space:]]|$)'; then
+    hook_deny "rg --preによる外部command実行は禁止です。rg単体で読める対象を検索してください。"
+  fi
 
-  hook_rewrite_command "$base_command$command_suffix"
+  if printf '%s\n' "$command_without_quote_splits" | grep -Eq '^[[:space:]]*git[[:space:]]+(diff|log|show)([[:space:]]|$)' && \
+     printf '%s\n' "$command_without_quote_splits" | grep -Eq -- '(^|[[:space:]])--output([=[:space:]]|$)'; then
+    hook_deny "読み取り用git commandの--outputによるfile書き込みは禁止です。標準出力で確認してください。"
+  fi
 }
 
-normalize_readonly_rg() {
-  local rg_command=$1
+is_safe_readonly_command() {
+  case "$1" in
+    pwd|pwd\ *|ls|ls\ *|rg\ *|grep\ *|cat\ *|head\ *|tail\ *|wc\ *|jq\ *|find\ *|nl\ *|sort\ *|bash\ -n\ *|command\ -v\ *|git\ status*|git\ diff*|git\ log*|git\ show*|git\ ls-files*|git\ grep*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+normalize_safe_dev_null() {
+  local readonly_command=$1
   local base_command
   local normalized_command
-  local sort_suffix=
-  local suppress_messages=0
+  local redirect_suffix
 
-  # stderr だけを /dev/null へ捨てる形と、後続が引数なし sort だけの形に限定する。
-  # stdout のリダイレクトや他の pipeline は安全な例外として扱わない。
-  case "$rg_command" in
-    rg\ *" 2>/dev/null | sort")
-      base_command=${rg_command%" 2>/dev/null | sort"}
-      suppress_messages=1
-      sort_suffix=" | sort"
+  # /dev/null以外のredirectはpermission層へ委ねる。末尾の単一redirectだけを扱い、
+  # 2>&1や複数redirectの新しい組み合わせを例外として増やさない。
+  case "$readonly_command" in
+    *" 2>/dev/null")
+      base_command=${readonly_command%" 2>/dev/null"}
+      redirect_suffix=" 2>/dev/null"
       ;;
-    rg\ *" 2> /dev/null | sort")
-      base_command=${rg_command%" 2> /dev/null | sort"}
-      suppress_messages=1
-      sort_suffix=" | sort"
+    *" 2> /dev/null")
+      base_command=${readonly_command%" 2> /dev/null"}
+      redirect_suffix=" 2>/dev/null"
       ;;
-    rg\ *" | sort")
-      base_command=${rg_command%" | sort"}
-      sort_suffix=" | sort"
+    *" 1>/dev/null")
+      base_command=${readonly_command%" 1>/dev/null"}
+      redirect_suffix=" >/dev/null"
       ;;
-    rg\ *" 2>/dev/null")
-      base_command=${rg_command%" 2>/dev/null"}
-      suppress_messages=1
+    *" 1> /dev/null")
+      base_command=${readonly_command%" 1> /dev/null"}
+      redirect_suffix=" >/dev/null"
       ;;
-    rg\ *" 2> /dev/null")
-      base_command=${rg_command%" 2> /dev/null"}
-      suppress_messages=1
+    *" >/dev/null")
+      base_command=${readonly_command%" >/dev/null"}
+      redirect_suffix=" >/dev/null"
+      ;;
+    *" > /dev/null")
+      base_command=${readonly_command%" > /dev/null"}
+      redirect_suffix=" >/dev/null"
       ;;
     *) return ;;
   esac
 
-  # single quote 内の regex や --glob は shell 展開されないため許可し、double quote 内の
-  # 展開や末尾以外の shell 構文があれば安全な例外として扱わない。
   has_safe_shell_syntax "$base_command" || return
+  is_safe_readonly_command "$base_command" || return
 
   normalized_command=$base_command
-  if [ "$suppress_messages" -eq 1 ]; then
+  if [ "$redirect_suffix" = " 2>/dev/null" ]; then
     case " $base_command " in
-      *" --no-messages "*) ;;
-      *) normalized_command="rg --no-messages${base_command#rg}" ;;
+      " rg "*)
+        case " $base_command " in
+          *" --no-messages "*) ;;
+          *) normalized_command="rg --no-messages${base_command#rg}" ;;
+        esac
+        redirect_suffix=
+        ;;
     esac
   fi
 
-  hook_rewrite_command "$normalized_command$sort_suffix"
+  hook_rewrite_command "$normalized_command$redirect_suffix"
 }
 
-case "$CMD" in
-  find\ *) normalize_readonly_find "$CMD" ;;
-  rg\ *) normalize_readonly_rg "$CMD" ;;
-esac
+deny_dangerous_read_options "$CMD"
 
 if has_compound_shell_syntax "$CMD" || invokes_inline_shell "$CMD"; then
   hook_deny "複数コマンドを shell loop・条件分岐・pipeline に集約してはいけません。Read/Grep/Glob または副作用を静的判定できる単一コマンドへ分割してください。複雑な処理はレビュー済み固定スクリプトへ移してください。"
 fi
+
+normalize_safe_dev_null "$CMD"
 
 exit 0
