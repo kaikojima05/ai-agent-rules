@@ -9,18 +9,19 @@ PASS=0; FAIL=0
 # hook にJSON入力を与えて stdout を返すヘルパー関数
 run() { echo "$2" | bash "$H/$1"; }
 
-matches_expected() { # expect(deny|ask|empty) output
+matches_expected() { # expect(deny|ask|allow|empty) output
   case "$1" in
     deny)  [ "$(echo "$2" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] ;;
     ask)   [ "$(echo "$2" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "ask" ] ;;
+    allow) [ "$(echo "$2" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "allow" ] ;;
     empty) [ -z "$2" ] ;;
   esac
 }
 
-# 実行結果が期待(deny/ask/empty)と一致するか判定して集計する関数
-check() { # name expect(deny|ask|empty) hook json
+# 実行結果が期待(deny/ask/allow/empty)と一致するか判定して集計する関数
+check() { # name expect(deny|ask|allow|empty) hook json
   OUT=$(run "$3" "$4")
-  # deny/ask は「stdout 全体が決定 JSON としてパース可能」まで検査する（出力汚染の検出）
+  # deny/ask/allow は「stdout 全体が決定 JSON としてパース可能」まで検査する（出力汚染の検出）
   if matches_expected "$2" "$OUT"; then PASS=$((PASS+1)); echo "ok   $1"
   else FAIL=$((FAIL+1)); echo "FAIL $1 -> [$OUT]"; fi
 }
@@ -102,16 +103,26 @@ check_bash_rewrite "readonly-search: stdoutのdev null破棄を許可" \
   "nl -ba src/foo.ts >/dev/null" \
   normalize-readonly-search.sh \
   "nl -ba src/foo.ts > /dev/null"
-check_bash_group "readonly-search: 単一コマンドを誤拒否しない" empty normalize-readonly-search.sh \
+check_bash_rewrite "readonly-search: Codexのquote済みrgを直接実行へ正規化" \
+  "rg '-n' '^(model|enum) |@@(?:unique|index|map)' 'front/prisma/schema.prisma'" \
+  normalize-readonly-search.sh \
+  "'rg' '-n' '^(model|enum) |@@(?:unique|index|map)' 'front/prisma/schema.prisma'"
+check_bash_rewrite "readonly-search: quote済みrgのglob引数を保持" \
+  "rg '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'" \
+  normalize-readonly-search.sh \
+  "'rg' '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'"
+check_bash_group "readonly-search: 安全な単一コマンドを明示allow" allow normalize-readonly-search.sh \
   "rg 'foo|bar' src" \
   "find src -maxdepth 2 -type f -print" \
   "cat src/foo.ts" \
   "nl -ba src/foo.ts" \
-  "sort src/files.txt" \
+  "sort src/files.txt"
+check_bash_group "readonly-search: allow対象外の単一コマンドは棄権" empty normalize-readonly-search.sh \
   "sed -n '1,240p' src/foo.ts" \
   'echo "$VALUE" 2>&1'
 check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny normalize-readonly-search.sh \
   "rg --files src | sort" \
+  "'rg' '--files' 'src' | 'sort'" \
   "find src -type f -print 2>/dev/null | sort" \
   "rg foo; rm target 2>/dev/null" \
   "rg foo 2>/dev/null | tee result.txt" \
@@ -126,6 +137,7 @@ check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny nor
   'for f in a.ts b.ts; do if test -f "$f"; then sed -n '\''1,240p'\'' "$f"; fi; done; rg --files src | rg '\''smtp|s3'\'''
 check_bash_group "readonly-search: 危険な読み取りoptionを拒否" deny normalize-readonly-search.sh \
   "find tmp -type f -delete" \
+  "'find' 'tmp' '-type' 'f' '-delete'" \
   "/usr/bin/find tmp -type f -delete" \
   "find tmp -type f -delete 2>/dev/null | sort" \
   'find tmp "-de""lete"' \
