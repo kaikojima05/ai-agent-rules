@@ -104,7 +104,9 @@ $bootstrap codex
 
 ### DeepSeekへの調査・実装委任
 
-コードベースの事実確認は、使用中のスキルの有無にかかわらず、共通のDeepSeek実行器へ固定する。上位モデルの Read / Grep / Glob と直接の検索・探索 Bash はhookが拒否し、上位モデルは配置済みの規約・スキルとDeepSeekの結果だけを読める。調査は`bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>`で行い、上位モデルは調査項目の設計、返却された重要根拠の確認、要件と設計の判断、テスト、レビュー、Gitを担当する。DeepSeekには読み取り調査または許可された本体コードの候補パッチ作成だけを委任する。固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+コードベースの事実確認は、まず共通のDeepSeek実行器へ委任する。調査は`bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>`で行う。surveyは依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。新規機能の類似例を全体から探す依頼では最後まで広げられる。通常は返却されたreportを採用して同じ範囲を重複調査しない。report内の矛盾、根拠不足、下位モデルの失敗、またはユーザーから異議がある場合だけ、上位モデルが独立して読み取り調査し、必要に応じて範囲を広げる。Read / Grep / Glob / 安全な単一検索コマンドは物理的に禁止せず、書き込みだけをsandboxと保護hookで制限する。DeepSeekには読み取り調査または許可された本体コードの候補パッチ作成だけを委任する。固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+
+surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最終文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。再表示と候補patchの確認には`bash [skills_root]/deepseek/delegate.sh show <task-id>`を使える。
 
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 

@@ -7,6 +7,9 @@ readonly HARD_BUDGET_USD="40"
 readonly MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"
 readonly MODEL_ID="~deepseek/deepseek-v4-flash-latest"
 readonly MODEL_VARIANT="high"
+readonly SURVEY_SCOPE_COUNT="4"
+readonly SURVEY_STEPS_PER_SCOPE="3"
+readonly SURVEY_MAX_STEPS="$((SURVEY_SCOPE_COUNT * SURVEY_STEPS_PER_SCOPE))"
 readonly SMOKE_PROMPT="hello"
 readonly SMOKE_ERROR_LINE_LIMIT="20"
 readonly OPENROUTER_KEY_ENDPOINT="https://openrouter.ai/api/v1/key"
@@ -21,6 +24,18 @@ NESTING_PATHS=()
 fail() {
   printf 'deepseek: %s\n' "$1" >&2
   exit 1
+}
+
+extract_report() {
+  jq -rs '
+    [
+      .[]
+      | select(.type == "text")
+      | (.part.text // .text // empty)
+      | select(type == "string" and test("[^[:space:]]"))
+    ]
+    | last // "DeepSeek returned no textual report. Inspect opencode.jsonl."
+  ' "$1"
 }
 
 validate_repo_path() {
@@ -66,16 +81,41 @@ case "$MODE" in
   smoke)
     [ "$#" -eq 1 ] || fail "smoke mode does not accept arguments"
     ;;
-  *) fail "mode must be research, survey, implement, errand, nesting, or smoke" ;;
+  show)
+    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
+    [ "$#" -eq 2 ] || fail "show mode requires task id"
+    ;;
+  *) fail "mode must be research, survey, implement, errand, nesting, smoke, or show" ;;
 esac
 command -v git >/dev/null 2>&1 || fail "git is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
-command -v curl >/dev/null 2>&1 || fail "curl is required"
-command -v opencode >/dev/null 2>&1 || fail "opencode is required"
-[ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is not set"
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not inside a git repository"
 cd "$REPO_ROOT" || fail "cannot enter repository root"
+
+if [ "$MODE" = "show" ]; then
+  RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"
+  [ -f "$RESULT_ROOT/result.json" ] || fail "result metadata not found: $RESULT_ROOT/result.json"
+  [ -f "$RESULT_ROOT/candidate.patch" ] || fail "candidate patch not found: $RESULT_ROOT/candidate.patch"
+  printf '%s\n' 'metadata:'
+  jq . "$RESULT_ROOT/result.json" || fail "cannot read result metadata"
+  printf '%s\n' 'report:'
+  if [ -f "$RESULT_ROOT/report.md" ]; then
+    cat "$RESULT_ROOT/report.md" || fail "cannot read result report"
+  else
+    [ -f "$RESULT_ROOT/opencode.jsonl" ] || fail "result report source not found: $RESULT_ROOT/opencode.jsonl"
+    extract_report "$RESULT_ROOT/opencode.jsonl" || fail "cannot extract legacy result report"
+  fi
+  if [ -s "$RESULT_ROOT/candidate.patch" ]; then
+    printf '%s\n' 'candidate.patch:'
+    cat "$RESULT_ROOT/candidate.patch" || fail "cannot read candidate patch"
+  fi
+  exit 0
+fi
+
+command -v curl >/dev/null 2>&1 || fail "curl is required"
+command -v opencode >/dev/null 2>&1 || fail "opencode is required"
+[ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is not set"
 
 if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
   validate_repo_path "$SPEC_PATH"
@@ -154,6 +194,14 @@ if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
       *.test.*|*.spec.*|*/test/*|*/tests/*|*/__tests__/*|*.snap|*fixture*|*mock*|*stub*|*fake*) fail "test assets cannot be delegated: $path" ;;
       AGENTS.md|*/AGENTS.md|*.md|package.json|*/package.json|*lock*.json|*.lock|*.toml|*.yaml|*.yml|*.env|*.env.*|*/migrations/*|*.prisma) fail "protected path cannot be delegated: $path" ;;
     esac
+    if [ -e "$REPO_ROOT/$path" ]; then
+      git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 || fail "existing allowed path must be tracked: $path"
+    else
+      parent=${path%/*}
+      [ "$parent" != "$path" ] || parent="."
+      [ -d "$REPO_ROOT/$parent" ] || fail "new allowed path parent must exist: $path"
+      git check-ignore -q -- "$path" && fail "new allowed path must not be ignored: $path"
+    fi
     [ -z "$(git status --porcelain -- "$path")" ] || fail "allowed path has uncommitted changes: $path"
     ALLOWED_PATHS+=("$path")
   done
@@ -170,10 +218,17 @@ jq -cn \
   --argjson permission_edit "$EDIT_RULES" \
   --arg model_id "$MODEL_ID" \
   --arg model_variant "$MODEL_VARIANT" \
+  --argjson survey_max_steps "$SURVEY_MAX_STEPS" \
   --arg mode "$MODE" '
   {
     "$schema":"https://opencode.ai/config.json",
     "share":"disabled",
+    "default_agent":"delegate",
+    "agent":{
+      "delegate":({
+        "description":"Execute the fixed delegated task"
+      } + (if $mode == "survey" then {"steps":$survey_max_steps} else {} end))
+    },
     "permission":{
       "*":"deny",
       "read":(if $mode == "smoke" then "deny" else {
@@ -235,7 +290,7 @@ elif [ "$MODE" = "research" ]; then
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 elif [ "$MODE" = "survey" ]; then
-  PROMPT="次の調査依頼についてコードベースを読み取り専用で調査してください。変更は禁止です。根拠を file:line で示し、不明点、反証候補、調査できなかった範囲を報告してください。調査依頼:\n$DIRECT_INSTRUCTION"
+  PROMPT="次の調査依頼についてコードベースを読み取り専用で調査してください。変更は禁止です。調査指示に含まれる識別子、パス、番号、固有名詞を省略・言い換えず保持してください。識別子の完全一致と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に調査範囲を広げ、現在の範囲で直接根拠が足りない場合だけ次へ進んでください。調査依頼が類似機能の全体探索を明示する場合、または狭い範囲で根拠を得られない場合はリポジトリ全体を調べてください。調査依頼へ回答できる根拠が揃った時点で直ちに終了し、依頼が求めていない設定、DB、schema、migration、テストを網羅監査してはなりません。調査範囲内の根拠を file:line で示し、不明点と確認できた反証候補を報告してください。調査依頼:\n$DIRECT_INSTRUCTION"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
@@ -269,7 +324,7 @@ env -i \
   OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   OPENCODE_CONFIG="$TEMP_ROOT/opencode.json" \
   OPENCODE_DISABLE_AUTOUPDATE=true \
-  opencode --pure run --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR"
+  opencode --pure run --agent delegate --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR"
 OPENCODE_STATUS=$?
 set -e
 
@@ -283,6 +338,8 @@ fi
 if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
   rm -rf "$WORKTREE/.deepseek-request"
 fi
+
+extract_report "$OPENCODE_OUTPUT" > "$RESULT_STAGING/report.md" || fail "cannot extract DeepSeek report"
 
 if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
   git add -N -- "${ALLOWED_PATHS[@]}" >/dev/null 2>&1 || true
@@ -321,15 +378,19 @@ jq -n \
   --arg task_id "$TASK_ID" \
   --arg model "$MODEL" \
   --arg model_variant "$MODEL_VARIANT" \
+  --arg report_file "report.md" \
+  --argjson survey_max_steps "$SURVEY_MAX_STEPS" \
   --argjson opencode_status "$OPENCODE_STATUS" \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$CHANGED_PATHS_JSON" \
-  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths}' \
+  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"
 RESULT_STAGING=""
 
 printf 'result: %s\n' "$RESULT_ROOT"
+printf '%s\n' 'report:'
+cat "$RESULT_ROOT/report.md"
 [ "$OPENCODE_STATUS" -eq 0 ] || exit "$OPENCODE_STATUS"

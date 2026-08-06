@@ -108,13 +108,15 @@ report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 grep -q 'SOFT_BUDGET_USD="38"' "$DS" && grep -q 'HARD_BUDGET_USD="40"' "$DS" && ok "DeepSeek予算: soft=38 hard=40" || ng "DeepSeek予算が不正"
 grep -q 'MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"' "$DS" && ok "DeepSeekモデル: V4 Flash latestを追従" || ng "DeepSeekモデルがlatest追従ではない"
 grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$DS" && grep -q '"reasoningEffort":$model_variant' "$DS" && grep -q -- '--variant "$MODEL_VARIANT"' "$DS" && ok "DeepSeek effort: highを明示" || ng "DeepSeek effortがhigh固定ではない"
+grep -q 'SURVEY_SCOPE_COUNT="4"' "$DS" && grep -q 'SURVEY_STEPS_PER_SCOPE="3"' "$DS" && grep -q 'SURVEY_MAX_STEPS="\$((SURVEY_SCOPE_COUNT \* SURVEY_STEPS_PER_SCOPE))"' "$DS" && grep -q '"steps":$survey_max_steps' "$DS" && grep -q -- '--agent delegate' "$DS" && ok "DeepSeek survey: 4段階ごとのagent step上限を固定" || ng "DeepSeek surveyのstep上限が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$DS" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$DS" && ok "DeepSeek config: readonly定数をjq引数で受け渡す" || ng "DeepSeek config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
 grep -Fq 'trap cleanup EXIT' "$DS" && grep -Fq "trap 'exit 130' INT" "$DS" && grep -Fq "trap 'exit 143' TERM" "$DS" && ok "DeepSeek中断: cleanup後に処理を継続しない" || ng "DeepSeekのsignal終了処理が不正"
 grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny"' "$DS" && ok "DeepSeek smoke: hello固定・tool全拒否" || ng "DeepSeek smokeのpromptまたは権限が不正"
 grep -q '^  nesting)' "$DS" && grep -q '修正案・コード変更は不要です' "$DS" && grep -q 'nesting path must be tracked' "$DS" && ok "DeepSeek nesting: 本体コードだけを読み取り検出" || ng "DeepSeek nesting検出モードが不正"
-grep -q '^  survey)' "$DS" && grep -q 'survey mode requires task id and instruction' "$DS" && grep -q '調査依頼についてコードベースを読み取り専用で調査' "$DS" && ok "DeepSeek survey: 設計書なしの調査を受け付ける" || ng "DeepSeek survey調査モードが不正"
+grep -q '^  survey)' "$DS" && grep -q 'survey mode requires task id and instruction' "$DS" && grep -q '識別子の完全一致と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順' "$DS" && grep -q '根拠が揃った時点で直ちに終了' "$DS" && ok "DeepSeek survey: 根拠に応じて調査範囲を段階拡張" || ng "DeepSeek surveyの段階調査契約が不正"
+grep -q '^  show)' "$DS" && grep -q 'show mode requires task id' "$DS" && grep -q "cannot extract DeepSeek report" "$DS" && ok "DeepSeek結果: report抽出と固定showを提供" || ng "DeepSeek結果の固定取得経路が不正"
 grep -q '^  errand)' "$DS" && grep -q 'errand mode requires task id, instruction, --, and production paths' "$DS" && grep -q '短い実装指示に従い' "$DS" && ok "DeepSeek errand: 設計書なしの限定実装を受け付ける" || ng "DeepSeek errand実装モードが不正"
 
 BOOTSTRAP_SKILL="$REPO/skills/bootstrap/SKILL.md"
@@ -170,11 +172,14 @@ report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 echo "== 軽微な実装委任と全体調査委任 =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
-grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail は呼ばない' "$ERRAND_SKILL" && grep -Fq '既存の実装挙動を調査する必要がある場合は' "$ERRAND_SKILL" && ok "errand は軽微な明示委任に限定" || ng "errand の起動境界が不正"
+grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail は呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、パス、番号、固有名詞を完全な文字列のまま保持' "$ERRAND_SKILL" && grep -Fq '最も近い1件だけを選び' "$ERRAND_SKILL" && ok "errand は識別子を保持して最寄り同型へ限定" || ng "errand の軽量調査境界が不正"
 grep -Fq 'errand <task-id> <短い実装指示> -- <許可する本体コード>' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はDeepSeekの実装境界を固定" || ng "errand の実装境界が不正"
-DELEGATE_HOOK="$REPO/hooks/shell/delegate.sh"
-[ -x "$DELEGATE_HOOK" ] && grep -q 'Read|Grep|Glob' "$DELEGATE_HOOK" && grep -q 'deepseek/delegate.sh survey' "$DELEGATE_HOOK" && grep -q '直接検索' "$DELEGATE_HOOK" && ok "コードベース調査をDeepSeekへ強制" || ng "コードベース調査の強制hookが無い"
-jq -e '[.hooks.PreToolUse[] | select(.matcher == "^(Read|Grep|Glob)$") | .hooks[].command | contains("delegate.sh")] | any' "$REPO/codex/hooks.json" >/dev/null && jq -e '[.hooks.PreToolUse[] | select(.matcher == "Read|Grep|Glob") | .hooks[].command | contains("delegate.sh")] | any' "$REPO/claude/settings.json" >/dev/null && ok "CodexとClaudeのRead系toolを調査委任hookへ配線" || ng "Read系toolの調査委任hook配線が無い"
+grep -Fq '同型実装から配置・名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q 'new allowed path parent must exist' "$DS" && grep -q 'new allowed path must not be ignored' "$DS" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
+if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
+  ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
+else
+  ng "上位モデルの読み取りを遮断する調査委任hookが残存"
+fi
 GROUP_FAILURES=
 for REMOVED_SKILL in audit interview; do
   [ ! -d "$REPO/skills/$REMOVED_SKILL" ] || append_group_failure "旧directory: skills/$REMOVED_SKILL"
@@ -292,7 +297,7 @@ DELEGATE_SCRIPT="$DELEGATE_REPO/.claude/skills/deepseek/delegate.sh"
 mkdir -p "$DELEGATE_BIN" "$(dirname "$DELEGATE_SCRIPT")"
 cp .claude/skills/deepseek/delegate.sh "$DELEGATE_SCRIPT"
 printf '#!/bin/bash\nprintf '\''{"data":{"usage_monthly":0,"usage":0,"limit":40,"limit_reset":"monthly"}}\\n'\''\n' > "$DELEGATE_BIN/curl"
-printf '#!/bin/bash\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/curl" "$DELEGATE_BIN/opencode"
 cd "$DELEGATE_REPO"
 git init -q
@@ -312,17 +317,40 @@ if [ -f "$EMPTY_RESULT" ] && [ "$(jq -c '.changed_paths' "$EMPTY_RESULT")" = "[]
 else
   ng "delegate-deepseek: 変更ゼロのresult.jsonが不正"
 fi
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey empty-survey 'src配下の定数を調査する' > delegate-survey.out 2>&1; then
+printf '#!/bin/bash\njq -e '\''(.default_agent == "delegate") and (.agent.delegate.steps == 12)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+SURVEY_EXACT_IDENTIFIER='t47_20__kanzen_douki__device_nebiki_kanri_db'
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey empty-survey "$SURVEY_EXACT_IDENTIFIER と同型の実装を調査する" > delegate-survey.out 2>&1; then
   ok "delegate-deepseek: surveyは設計書なしの読み取り調査を完了"
 else
   ng "delegate-deepseek: surveyが失敗"; cat delegate-survey.out
 fi
-SURVEY_RESULT="$DELEGATE_REPO/.claude/tmp/deepseek/empty-survey/result.json"
-if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/empty-survey/spec.md" ]; then
-  ok "delegate-deepseek: surveyは調査指示を永続化しない"
+SURVEY_ROOT="$DELEGATE_REPO/.claude/tmp/deepseek/empty-survey"
+SURVEY_RESULT="$SURVEY_ROOT/result.json"
+if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "12" ] && [ ! -e "$SURVEY_ROOT/spec.md" ]; then
+  ok "delegate-deepseek: surveyは調査指示をspecへ永続化しない"
 else
   ng "delegate-deepseek: surveyの一時指示またはresult.jsonが不正"
 fi
+if grep -Fq "$SURVEY_EXACT_IDENTIFIER" "$SURVEY_ROOT/report.md" && grep -Fq '機能語・ドメイン語' "$SURVEY_ROOT/report.md" && grep -Fq '根拠が揃った時点で直ちに終了' "$SURVEY_ROOT/report.md" && grep -Fq 'report:' delegate-survey.out; then
+  ok "delegate-deepseek: surveyの識別子と段階終了条件をreportへ返却"
+else
+  ng "delegate-deepseek: survey reportが識別子または段階調査契約を欠落"
+fi
+if PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show empty-survey > delegate-show.out 2>&1 && grep -Fq 'metadata:' delegate-show.out && grep -Fq "$SURVEY_EXACT_IDENTIFIER" delegate-show.out; then
+  ok "delegate-deepseek: showはAPI keyなしで調査結果を再表示"
+else
+  ng "delegate-deepseek: showで調査結果を再取得できない"; cat delegate-show.out
+fi
+mv "$SURVEY_ROOT/report.md" "$SURVEY_ROOT/report.saved"
+if PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show empty-survey > delegate-show-legacy.out 2>&1 && grep -Fq "$SURVEY_EXACT_IDENTIFIER" delegate-show-legacy.out; then
+  ok "delegate-deepseek: showは旧jsonlから最終reportを復元"
+else
+  ng "delegate-deepseek: showで旧jsonlの最終reportを復元できない"; cat delegate-show-legacy.out
+fi
+mv "$SURVEY_ROOT/report.saved" "$SURVEY_ROOT/report.md"
+printf '#!/bin/bash\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
 mkdir -p src
 printf 'export const subject = true\n' > src/subject.ts
 git add src/subject.ts
@@ -348,6 +376,29 @@ if [ -f "$ERRAND_RESULT" ] && [ "$(jq -r '.mode' "$ERRAND_RESULT")" = "errand" ]
   ok "delegate-deepseek: errandは実装指示を永続化しない"
 else
   ng "delegate-deepseek: errandの一時指示またはresult.jsonが不正"
+fi
+printf '#!/bin/bash\nprintf '\''export const addedSubject = true\\n'\'' > src/added-subject.ts\nprintf '\''{"type":"text","text":"added"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand errand-new-file '同型に従いadded-subject.tsを追加する' -- src/added-subject.ts > delegate-errand-new.out 2>&1; then
+  ok "delegate-deepseek: errandは既存directoryへの定型ファイル追加を許可"
+else
+  ng "delegate-deepseek: errandの定型ファイル追加に失敗"; cat delegate-errand-new.out
+fi
+ERRAND_NEW_ROOT="$DELEGATE_REPO/.claude/tmp/deepseek/errand-new-file"
+if [ "$(jq -c '.changed_paths' "$ERRAND_NEW_ROOT/result.json" 2>/dev/null)" = '["src/added-subject.ts"]' ] && grep -Fq 'addedSubject' "$ERRAND_NEW_ROOT/candidate.patch"; then
+  ok "delegate-deepseek: 新規本体ファイルを候補patchへ限定記録"
+else
+  ng "delegate-deepseek: 新規本体ファイルの候補patchが不正"
+fi
+if PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show errand-new-file > delegate-show-patch.out 2>&1 && grep -Fq 'candidate.patch:' delegate-show-patch.out && grep -Fq 'addedSubject' delegate-show-patch.out; then
+  ok "delegate-deepseek: showは候補patchを固定経路で再表示"
+else
+  ng "delegate-deepseek: showで候補patchを再取得できない"; cat delegate-show-patch.out
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand errand-missing-parent '存在しないdirectoryへ追加する' -- missing/added-subject.ts > delegate-errand-missing.out 2>&1; then
+  ng "delegate-deepseek: 存在しない親directoryへの追加を許可"
+else
+  ok "delegate-deepseek: 存在しない親directoryへの追加を拒否"
 fi
 printf '#!/bin/bash\ntouch protected-change.txt\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
@@ -587,16 +638,6 @@ fi
 
 echo "== 5.5 session marker と発火スコープ（codex） =="
 H=.codex/hooks/shell
-DIRECT_READ=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Read",tool_input:{file_path:($cwd + "/src/foo.ts")}}')
-OUT=$(echo "$DIRECT_READ" | bash $H/delegate.sh)
-[ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "delegate: Codex Readによる直接コード調査をdeny" || ng "delegate: Codex Readが素通し out=[$OUT]"
-DELEGATED_RESULT=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Read",tool_input:{file_path:($cwd + "/.codex/tmp/deepseek/task/result.json")}}')
-[ -z "$(echo "$DELEGATED_RESULT" | bash $H/delegate.sh)" ] && ok "delegate: DeepSeek結果のReadを許可" || ng "delegate: DeepSeek結果Readを誤拒否"
-DIRECT_SEARCH=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"rg subject src"}}')
-OUT=$(echo "$DIRECT_SEARCH" | bash $H/delegate.sh)
-[ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "delegate: Bash検索による直接コード調査をdeny" || ng "delegate: Bash検索が素通し out=[$OUT]"
-FIXED_DELEGATE=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"bash .agents/skills/deepseek/delegate.sh survey task-id 調査"}}')
-[ -z "$(echo "$FIXED_DELEGATE" | bash $H/delegate.sh)" ] && ok "delegate: 固定DeepSeek実行器を許可" || ng "delegate: 固定DeepSeek実行器を誤拒否"
 UP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$tdd src/foo.ts を回して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UP" | bash $H/session.sh
 [ -f .codex/tmp/session.tdd.SESS1 ] && ok "session: \$tdd 起動で marker 記録" || ng "session: marker 記録失敗"

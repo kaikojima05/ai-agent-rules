@@ -74,11 +74,6 @@
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/delegate.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-eval.sh\"",
             "timeout": 5
           },
@@ -120,16 +115,6 @@
           {
             "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/commit-gate.sh\"",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "^(Read|Grep|Glob)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/delegate.sh\"",
             "timeout": 5
           }
         ]

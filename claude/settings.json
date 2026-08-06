@@ -10,10 +10,6 @@
         },
         {
           "type": "command",
-          "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/delegate.sh"
-        },
-        {
-          "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/deny-registry.sh"
           },
           {
@@ -44,15 +40,6 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/overwrite.sh"
-        }
-      ]
-    },
-    {
-      "matcher": "Read|Grep|Glob",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/delegate.sh"
         }
       ]
     },
