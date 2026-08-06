@@ -19,6 +19,11 @@ prefix_rule(
     justification = "実装済みの設計書を固定の.codex/prompt/.prompt.md上で[x]に倒します。",
 )
 prefix_rule(
+    pattern = ["bash", ".agents/skills/clean-code/quality-gate.sh"],
+    decision = "allow",
+    justification = "clean-code完了時の現在HEADと作業ツリー状態だけを一時receiptへ記録・検証します。",
+)
+prefix_rule(
     pattern = ["bash", ".agents/skills/run-agent/delegate-deepseek.sh"],
     decision = "allow",
     justification = "予算・ZDR・編集先を固定検証してDeepSeekを隔離worktreeで実行します。",
