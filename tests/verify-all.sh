@@ -166,9 +166,13 @@ echo "== run-agent の最終品質ゲート =="
 CLEAN_CODE_SKILL="$REPO/skills/clean-code/SKILL.md"
 NESTING_REVIEW_SKILL="$REPO/skills/nesting-review/SKILL.md"
 RUN_AGENT_SKILL="$REPO/skills/run-agent/SKILL.md"
+QUALITY_GATE_SCRIPT="$REPO/skills/clean-code/quality-gate.sh"
+MARK_PROMPT_DONE_SCRIPT="$REPO/skills/run-agent/mark-prompt-done.sh"
 [ -f "$NESTING_REVIEW_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/nesting-review" >/dev/null && ok "nesting-review スキルが有効" || ng "nesting-review スキルが無効"
 grep -Fq 'Skill(nesting-review)' "$CLEAN_CODE_SKILL" && grep -q '必ず呼ぶ' "$CLEAN_CODE_SKILL" && ok "clean-code はnesting-reviewを必須化" || ng "clean-code のnesting-review連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$NESTING_REVIEW_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$NESTING_REVIEW_SKILL" && ok "nesting-review は見せかけの関数抽出を禁止" || ng "nesting-review の関数抽出禁止が無い"
+[ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$CLEAN_CODE_SKILL" && ok "clean-code の品質receipt記録器が有効" || ng "clean-code の品質receipt記録器が無い"
+grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$RUN_AGENT_SKILL" && ok "run-agent の完了更新は品質receiptを検証" || ng "run-agent の品質receipt検証が無い"
 if grep -Fq 'Skill(clean-code)' "$RUN_AGENT_SKILL" && \
    grep -q 'index更新と最終報告の前に `clean-code` を自動で実行する' "$RUN_AGENT_SKILL" && \
    ! grep -q 'nesting-review' "$RUN_AGENT_SKILL" && \
@@ -185,6 +189,10 @@ cp -R "$REPO/hooks" "$S/claude-sim/.claude/hooks"
 cp -R "$REPO/skills" "$S/claude-sim/.claude/skills"
 cp -R "$REPO/rules" "$S/claude-sim/.claude/rules"
 cd "$S/claude-sim"
+git init -q
+git config user.email tester@example.com
+git config user.name tester
+git commit --allow-empty -qm "test: 品質ゲートfixtureを初期化"
 if bash .claude/skills/init-agent/init-agent.sh claude > init-claude.log 2>&1; then ok "init-agent claude 実行"; else ng "init-agent claude 実行"; cat init-claude.log; fi
 bash -n .claude/hooks/shell/require-test.sh 2>/dev/null && ok "解決後 require-test 構文" || ng "解決後 require-test 構文"
 grep -q 'HOOK_AGENT="claude"' .claude/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=claude" || ng "hook-io HOOK_AGENT=claude"
@@ -204,6 +212,7 @@ LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude 2>/d
 echo "== 2.5 cowlick / run-agent の設計書フロー（claude 配置） =="
 AP=".claude/skills/cowlick/apply-prompt.sh"
 MD=".claude/skills/run-agent/mark-prompt-done.sh"
+QG=".claude/skills/clean-code/quality-gate.sh"
 mkdir -p draft-prompt
 printf '# 実装順\n\n- [ ] branch-user-api-prompt.md\n- [ ] branch-user-form-prompt.md\n' > draft-prompt/.prompt.md
 echo api > draft-prompt/branch-user-api-prompt.md
@@ -243,6 +252,8 @@ printf -- '- [ ] branch-a-prompt.md\n- [ ] ../evil.md\n' > draft-prompt/.prompt.
 if bash "$AP" > apply5.out 2>&1; then ng "apply-prompt: 不正な index 行を通した"; else ok "apply-prompt: 不正な index 行を拒否"; fi
 rm -rf draft-prompt
 
+if bash "$MD" billing > mark-without-quality-gate.out 2>&1; then ng "mark-prompt-done: 品質receipt無しを通した"; else ok "mark-prompt-done: 品質receipt無しを拒否"; fi
+if bash "$QG" record billing > quality-gate.out 2>&1; then ok "quality-gate: clean HEADを記録"; else ng "quality-gate: clean HEADを記録できない"; cat quality-gate.out; fi
 bash "$MD" billing > mark.out 2>&1
 grep -qE '^\- \[x\] branch-billing-prompt\.md$' .claude/prompt/.prompt.md && ok "mark-prompt-done: index を [x] に倒す" || { ng "mark-prompt-done: [x] に倒せない"; cat mark.out; }
 grep -q '^remaining: 0$' mark.out && ok "mark-prompt-done: 残件数を報告" || { ng "mark-prompt-done: 残件数の報告が無い"; cat mark.out; }
