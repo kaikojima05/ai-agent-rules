@@ -150,6 +150,10 @@ check "registry-fetch: yarn build は棄権"     empty deny-registry-fetch.sh '{
 
 # --- enforce-agent-commit ---
 check "agent-commit: git add -A は deny"       deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git add -A"}}'
+check_bash_group "agent-commit: 強制stage は deny" deny enforce-agent-commit.sh \
+  "git add -f ignored.test.ts" \
+  "git add --force ignored.test.ts" \
+  "git add ignored.test.ts -f"
 check "agent-commit: plain push は deny"       deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}'
 check "agent-commit: cherry-pick は deny"      deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git cherry-pick abc123"}}'
 mkdir -p commit-fixture
