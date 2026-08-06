@@ -94,33 +94,48 @@ check_bash_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
   "rg --no-messages -n 'foo|bar' front --glob '!generated/**'" \
   normalize-readonly-search.sh \
   "rg -n 'foo|bar' front --glob '!generated/**' 2>/dev/null"
-check_bash_rewrite "readonly-search: rgとsortの安全なpipelineを許可" \
-  "rg --no-messages --files draft-prompt .codex/rules rules | sort" \
+check_bash_rewrite "readonly-search: findのstderr破棄を許可" \
+  "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null" \
   normalize-readonly-search.sh \
-  "rg --files draft-prompt .codex/rules rules 2>/dev/null | sort"
-check_bash_rewrite "readonly-search: stderr操作なしのsortも許可" \
-  "rg --files src | sort" \
+  "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null"
+check_bash_rewrite "readonly-search: stdoutのdev null破棄を許可" \
+  "nl -ba src/foo.ts >/dev/null" \
   normalize-readonly-search.sh \
-  "rg --files src | sort"
-check_bash_rewrite "readonly-search: 読み取り専用findとsortを許可" \
-  "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null | sort" \
-  normalize-readonly-search.sh \
-  "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null | sort"
+  "nl -ba src/foo.ts > /dev/null"
 check_bash_group "readonly-search: 単一コマンドを誤拒否しない" empty normalize-readonly-search.sh \
   "rg 'foo|bar' src" \
+  "find src -maxdepth 2 -type f -print" \
+  "cat src/foo.ts" \
+  "nl -ba src/foo.ts" \
+  "sort src/files.txt" \
   "sed -n '1,240p' src/foo.ts" \
-  'echo "$VALUE" 2>&1' \
-  "rg foo > result.txt 2>/dev/null"
+  'echo "$VALUE" 2>&1'
 check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny normalize-readonly-search.sh \
+  "rg --files src | sort" \
+  "find src -type f -print 2>/dev/null | sort" \
   "rg foo; rm target 2>/dev/null" \
   "rg foo 2>/dev/null | tee result.txt" \
   'rg $(danger) 2>/dev/null' \
   $'pwd\nls' \
   "zsh -lc 'pwd; ls'" \
+  "/bin/zsh -lc 'pwd; ls'" \
+  "env bash -c 'pwd; ls'" \
+  "bash --noprofile -c 'pwd; ls'" \
   "sleep 1 & echo done" \
-  'for f in a.ts b.ts; do if test -f "$f"; then sed -n '\''1,240p'\'' "$f"; fi; done; rg --files src | rg '\''smtp|s3'\''' \
+  'for f in a.ts b.ts; do if test -f "$f"; then sed -n '\''1,240p'\'' "$f"; fi; done; rg --files src | rg '\''smtp|s3'\'''
+check_bash_group "readonly-search: 危険な読み取りoptionを拒否" deny normalize-readonly-search.sh \
+  "find tmp -type f -delete" \
   "find tmp -type f -delete 2>/dev/null | sort" \
-  'find tmp "-de""lete" 2>/dev/null | sort'
+  'find tmp "-de""lete"' \
+  "find tmp -type f -exec rm {} +" \
+  "sort -o result.txt source.txt" \
+  "sort --output=result.txt source.txt" \
+  "sort --compress-program=gzip source.txt" \
+  "rg --pre preprocess.sh pattern src" \
+  "git diff --output=result.patch"
+check_bash_group "readonly-search: 通常fileへのredirectはpermission層へ委任" empty normalize-readonly-search.sh \
+  "cat src/foo.ts > result.txt" \
+  "rg foo > result.txt 2>/dev/null"
 
 # --- deny-registry-fetch ---
 check "registry-fetch: npx は deny"           deny  deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"npx create-app"}}'
