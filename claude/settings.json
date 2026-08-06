@@ -90,8 +90,8 @@
       "bash .claude/skills/polish/quality-gate.sh *",
       "bash .claude/skills/rebase/rebase.sh",
       "bash .claude/skills/rebase/rebase.sh *",
-      "bash .claude/skills/conductor/delegate-deepseek.sh",
-      "bash .claude/skills/conductor/delegate-deepseek.sh *",
+      "bash .claude/skills/deepseek/delegate.sh",
+      "bash .claude/skills/deepseek/delegate.sh *",
       "bash .claude/skills/e2e/apply-e2e-plan.sh",
       "bash .claude/skills/e2e/apply-e2e-plan.sh *"
     ],
