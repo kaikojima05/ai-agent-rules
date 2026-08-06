@@ -1,23 +1,21 @@
 #!/bin/bash
 # PreToolUse(Bash) hook: Git のコミット操作をリポジトリ共通の契約に適合する形だけ通す。
-# 契約: 1 ファイル = 1 コミット / メッセージは「[<エージェント名>]: {対象ファイル名}/{変更内容(日本語)}」/
-#       タグのエージェント名は hook-io.sh の HOOK_AGENT（init-agent が確定させた値）を使う。
+# 契約: 1 ファイル = 1 コミット。コミットsubjectの形式・agent名・日本語要件は
+#       commit-message-contract.sh を唯一の実装として使う。
 #       author は常にユーザー本人の git config identity（AI を author・co-author に混ぜない）。
 # 本 hook は deny 専任。適合するコミットの自動化は settings の allow(Bash(git commit:*)) が担う。
 # 例外(squash): 未 push 範囲のコミット整理は rebase-squash スキルの決定的スクリプトのみが行い、
-#       squash 後のメッセージは「[<エージェント名>]: {機能}/{変更内容(日本語)}」とする(形式 regex は共通)。
-#       スクリプト内部の git commit は Bash コマンド文字列に現れず本 hook の視界外のため、
-#       同スクリプトが契約検証(形式・--author 不在・AI 署名不在)を内蔵する。
+#       squash 実行器も同じ契約実装を source して subject を検証する。
 #       生の履歴書き換えコマンドの deny は deny-history-rewrite.sh が担う。
 # 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。stderr を捨てる。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
+. "$(dirname "$0")/commit-message-contract.sh"
 [ "$(hook_tool_name)" = "Bash" ] || exit 0
 CMD=$(hook_command)
 [ -z "$CMD" ] && exit 0
 
 EXPECTED_STAGED_FILE_COUNT=1
-JAPANESE_TEXT_RE='[ぁ-んァ-ヶ一-龠々ー]'
 
 # フラグ検査はクォート内(コミットメッセージ本文)を除去してから行う。
 # メッセージ内の文字列(例:「-a オプションの説明」)をフラグと誤認しないため
@@ -31,7 +29,7 @@ echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+cherry-pick([[:space
 
 if echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+commit'; then
   # AI をコミット identity に混ぜる要素は禁止（AI 作業の表明はメッセージ先頭のタグだけ）
-  echo "$CMD" | grep -qiE 'co-authored-by|generated with' && \
+  commit_message_has_forbidden_ai_signature "$CMD" && \
     hook_deny "コミットへの AI 署名(Co-Authored-By / Generated with)は禁止です。author はユーザー本人のまま、メッセージ先頭の [$HOOK_AGENT]: だけで AI 作業を示してください。"
   echo "$MASKED" | grep -qE -- '--author' && \
     hook_deny "--author の指定は禁止です。git config の identity(ユーザー本人)でコミットしてください。"
@@ -54,13 +52,8 @@ if echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+commit'; then
   [ -n "$COMMIT_MESSAGE" ] || \
     hook_deny "コミットメッセージを検証できません。-m または --message とクォートしたメッセージを指定してください。"
 
-  MESSAGE_PREFIX="[$HOOK_AGENT]: $STAGED_BASENAME/"
-  case "$COMMIT_MESSAGE" in
-    "$MESSAGE_PREFIX"*) CHANGE_DESCRIPTION=${COMMIT_MESSAGE#"$MESSAGE_PREFIX"} ;;
-    *) hook_deny "コミットメッセージの対象ファイル名を stage 済みの $STAGED_BASENAME と一致させてください。形式: [$HOOK_AGENT]: $STAGED_BASENAME/{変更内容(日本語)}" ;;
-  esac
-  [ -n "$CHANGE_DESCRIPTION" ] && printf '%s\n' "$CHANGE_DESCRIPTION" | grep -qE "$JAPANESE_TEXT_RE" || \
-    hook_deny "コミットメッセージの変更内容には日本語を含めてください。形式: [$HOOK_AGENT]: $STAGED_BASENAME/{変更内容(日本語)}"
+  commit_message_is_valid_for_scope "$STAGED_BASENAME" "$COMMIT_MESSAGE" || \
+    hook_deny "コミットメッセージが契約に一致しません。stage 済みのファイル名を対象名にしてください。形式: $(commit_message_format)"
 fi
 
 # 一括ステージングも 1 ファイル = 1 コミットの契約違反
