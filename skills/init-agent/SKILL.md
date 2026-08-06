@@ -1,7 +1,7 @@
 ---
 name: init-agent
 description: "配置済みのエージェント設定ファイル群の placeholder（[agent_name] / [skills_root]）置換および [NOTE]: init-agent 対象 の解決を行う"
-allowed-tools: Read, Grep, Glob, Bash
+allowed-tools: Bash
 disable-model-invocation: true
 ---
 
@@ -10,6 +10,12 @@ disable-model-invocation: true
 ユーザーが配置した AGENTS.md・設定ディレクトリ・skills ツリーに含まれるテンプレート記述を、実際のエージェント種別に合わせて書き換える。
 
 ## 実行フロー
+
+### 最初のツール呼び出し
+
+`claude` / `codex` の引数がある場合、最初のツール呼び出しで Step 3 の対応するコマンドを実行する。実行前に Read / Grep / Glob、`pwd`、`git status`、placeholder 検索、設定確認を行ってはならない。
+
+Why: 初期化前の hook は `HOOK_AGENT` が placeholder のため、初期化コマンド以外のツール呼び出しを拒否する。必要な種別・パス・処理は本スキル内で既に確定しており、事前調査には情報上の価値がない。
 
 ### Step 1: スキルを呼び出す
 
