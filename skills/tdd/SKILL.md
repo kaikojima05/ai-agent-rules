@@ -59,10 +59,10 @@ hooks:
 
 ### 4. DeepSeekへ本体実装を委任する
 
-conductorの委任実行器を使い、設計書と変更可能な本体コードの相対パスだけを渡す。テスト結果の要約は[agent_name]が指示へ含める。
+共通のDeepSeek委任実行器を使い、設計書と変更可能な本体コードの相対パスだけを渡す。テスト結果の要約は[agent_name]が指示へ含める。
 
 ```bash
-bash [skills_root]/conductor/delegate-deepseek.sh implement <task-id> <設計書> <許可する本体コード>...
+bash [skills_root]/deepseek/delegate.sh implement <task-id> <設計書> <許可する本体コード>...
 ```
 
 DeepSeekは隔離worktreeで候補パッチを作る。シェル、Git、外部通信、テスト・設計・設定の編集は許可しない。
