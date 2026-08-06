@@ -171,10 +171,11 @@ grep -Fq 'Skill(nesting-review)' "$CLEAN_CODE_SKILL" && grep -q '必ず呼ぶ' "
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$NESTING_REVIEW_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$NESTING_REVIEW_SKILL" && ok "nesting-review は見せかけの関数抽出を禁止" || ng "nesting-review の関数抽出禁止が無い"
 if grep -Fq 'Skill(clean-code)' "$RUN_AGENT_SKILL" && \
    grep -q 'index更新と最終報告の前に `clean-code` を自動で実行する' "$RUN_AGENT_SKILL" && \
+   ! grep -q 'nesting-review' "$RUN_AGENT_SKILL" && \
    [ "$(grep -n 'index更新と最終報告の前に `clean-code` を自動で実行する' "$RUN_AGENT_SKILL" | cut -d: -f1)" -lt "$(grep -n '^### 6\. indexを完了へ変更する' "$RUN_AGENT_SKILL" | cut -d: -f1)" ]; then
-  ok "run-agent はindex更新・最終報告前にclean-codeを強制"
+  ok "run-agent はclean-codeだけを最終品質ゲートにする"
 else
-  ng "run-agent のclean-code最終ゲートが不正"
+  ng "run-agent のclean-code品質ゲートの依存が不正"
 fi
 
 echo "== 2. claude 配置シミュレーション =="
