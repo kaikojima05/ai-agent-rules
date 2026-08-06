@@ -120,19 +120,25 @@ check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny nor
   "zsh -lc 'pwd; ls'" \
   "/bin/zsh -lc 'pwd; ls'" \
   "env bash -c 'pwd; ls'" \
+  "/usr/bin/env zsh -lc 'pwd; ls'" \
   "bash --noprofile -c 'pwd; ls'" \
   "sleep 1 & echo done" \
   'for f in a.ts b.ts; do if test -f "$f"; then sed -n '\''1,240p'\'' "$f"; fi; done; rg --files src | rg '\''smtp|s3'\'''
 check_bash_group "readonly-search: 危険な読み取りoptionを拒否" deny normalize-readonly-search.sh \
   "find tmp -type f -delete" \
+  "/usr/bin/find tmp -type f -delete" \
   "find tmp -type f -delete 2>/dev/null | sort" \
   'find tmp "-de""lete"' \
   "find tmp -type f -exec rm {} +" \
+  "find tmp -type f -fprint result.txt" \
   "sort -o result.txt source.txt" \
+  "sort -oresult.txt source.txt" \
   "sort --output=result.txt source.txt" \
   "sort --compress-program=gzip source.txt" \
   "rg --pre preprocess.sh pattern src" \
-  "git diff --output=result.patch"
+  "rg --pre=preprocess.sh pattern src" \
+  "git diff --output=result.patch" \
+  "git show --output=result.txt HEAD"
 check_bash_group "readonly-search: 通常fileへのredirectはpermission層へ委任" empty normalize-readonly-search.sh \
   "cat src/foo.ts > result.txt" \
   "rg foo > result.txt 2>/dev/null"
