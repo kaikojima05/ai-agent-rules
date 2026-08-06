@@ -46,7 +46,7 @@ preflight が付けた **明示要件**、**禁止・制約**、**受入済み t
 各設計書の初期ドラフトを、固定実行器の`research`モードへ1枚ずつ渡す。
 
 ```
-bash [skills_root]/conductor/delegate-deepseek.sh research <task-id> draft-prompt/branch-<機能名>-prompt.md
+bash [skills_root]/deepseek/delegate.sh research <task-id> draft-prompt/branch-<機能名>-prompt.md
 ```
 
 - DeepSeekは読み取り専用とし、コード、テスト、設計ドラフトを変更させない
