@@ -23,12 +23,12 @@ ai-agent-rules/
 │   ├── preflight/          # 要件の由来・既存経路・境界ゼロ案を設計前に調査
 │   ├── cowlick/            # 機能ごとの未承認設計ドラフトを作成
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
+│   ├── deepseek/           # 調査・候補実装を隔離実行する共通基盤
 │   ├── conductor/          # 設計書1枚を選び、DeepSeek実装を統括して停止
 │   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
+│   ├── errand/             # 設計書なしの軽微な実装をDeepSeekへ限定委任
 │   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
 │   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
-│   ├── audit/              # 差分と規約の突き合わせ
-│   ├── interview/          # 設計意図の深掘り対話
 │   ├── polish/             # フォーマッタ・リンターの一括適用
 │   ├── unwind/             # 深い制御フローネストを構造的に縮退
 │   ├── context-save/       # 知見の登録（context-dictionary API）
@@ -104,7 +104,7 @@ $bootstrap codex
 
 ### DeepSeekへの調査・実装委任
 
-`preflight`、`cowlick`、`ponytail`、`conductor`は、コードベースの探索をDeepSeekなどの下位モデルへ委任する。上位モデルは調査項目の設計、重要根拠の再確認、要件と設計の判断、テスト、レビュー、Gitを担当し、下位モデルには読み取り調査または許可された本体コードの編集だけを委任する。固定実行器を使う場合はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+コードベースの事実確認は、使用中のスキルの有無にかかわらず、共通のDeepSeek実行器へ固定する。上位モデルの Read / Grep / Glob と直接の検索・探索 Bash はhookが拒否し、上位モデルは配置済みの規約・スキルとDeepSeekの結果だけを読める。調査は`bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>`で行い、上位モデルは調査項目の設計、返却された重要根拠の確認、要件と設計の判断、テスト、レビュー、Gitを担当する。DeepSeekには読み取り調査または許可された本体コードの候補パッチ作成だけを委任する。固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
@@ -114,7 +114,7 @@ export OPENROUTER_API_KEY="..."
 
 API keyには40 USD以下の月次またはリセットなしhard limitを設定する。固定実行器は使用量38 USDで新規実行を止め、各リクエストでもZDRと学習利用拒否を強制する。キーはリポジトリへ保存しない。
 
-疎通確認は`bash [skills_root]/conductor/delegate-deepseek.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
+疎通確認は`bash [skills_root]/deepseek/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
 
 通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellをDeepSeekへ許可しない。
 
