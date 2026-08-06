@@ -30,6 +30,7 @@ ai-agent-rules/
 │   ├── rule-audit/         # 差分と規約の突き合わせ
 │   ├── interview/          # 設計意図の深掘り対話
 │   ├── clean-code/         # フォーマッタ・リンターの一括適用
+│   ├── nesting-review/     # 深い制御フローネストを構造的に縮退
 │   ├── context-save/       # 知見の登録（context-dictionary API）
 │   ├── context-search/     # 知見の検索
 │   ├── context-update/     # 知見の更新
