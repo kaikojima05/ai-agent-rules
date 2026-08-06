@@ -73,6 +73,8 @@
       "bash .claude/skills/cowlick/apply-prompt.sh *",
       "bash .claude/skills/run-agent/mark-prompt-done.sh",
       "bash .claude/skills/run-agent/mark-prompt-done.sh *",
+      "bash .claude/skills/clean-code/quality-gate.sh",
+      "bash .claude/skills/clean-code/quality-gate.sh *",
       "bash .claude/skills/run-agent/delegate-deepseek.sh",
       "bash .claude/skills/run-agent/delegate-deepseek.sh *",
       "bash .claude/skills/e2e/apply-e2e-plan.sh",
