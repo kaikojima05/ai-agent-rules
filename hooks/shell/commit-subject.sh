@@ -6,11 +6,11 @@ COMMIT_MESSAGE_AGENT="[agent_name]"
 COMMIT_MESSAGE_JAPANESE_RE='[ぁ-んァ-ヶ一-龠々ー]'
 
 commit_message_prefix() {
-  printf '[%s]: %s/' "$COMMIT_MESSAGE_AGENT" "$1"
+  printf '%s: ' "$1"
 }
 
 commit_message_format() {
-  printf '[%s]: {対象名}/{変更内容（日本語を含む）}\n' "$COMMIT_MESSAGE_AGENT"
+  printf '{対象名}: {変更内容（日本語を含む）}\n'
 }
 
 commit_message_has_forbidden_ai_signature() {
@@ -27,6 +27,19 @@ commit_message_is_valid_for_scope() {
     *) return 1 ;;
   esac
 
+  [ -n "$description" ] && printf '%s\n' "$description" | grep -qE "$COMMIT_MESSAGE_JAPANESE_RE"
+}
+
+# 通常の commit と rebase の双方で使う最終契約。対象名は先頭の colon まで、
+# 変更内容は ": " の後ろ全体として扱うので、説明文中の colon は許可する。
+commit_message_subject_is_valid() {
+  subject=$1
+  scope=$(printf '%s\n' "$subject" | cut -d: -f1)
+  description=$(printf '%s\n' "$subject" | sed 's/^[^:]*: //')
+
+  [ -n "$scope" ] || return 1
+  [ "$scope: $description" = "$subject" ] || return 1
+  printf '%s\n' "$scope" | grep -qE '^[^[:space:]:/]+(/[^[:space:]:/]+)*$' || return 1
   [ -n "$description" ] && printf '%s\n' "$description" | grep -qE "$COMMIT_MESSAGE_JAPANESE_RE"
 }
 
