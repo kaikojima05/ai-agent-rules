@@ -1,8 +1,7 @@
 #!/bin/bash
 # コミット subject の唯一の契約。通常コミット hook と rebase 実行器が source して使う。
-# 配置時に bootstrap が agent 名を確定する。直接実行時は prefix 生成と形式検証にも使える。
+# 直接実行時は prefix 生成と形式検証にも使える。
 
-COMMIT_MESSAGE_AGENT="[agent_name]"
 COMMIT_MESSAGE_JAPANESE_RE='[ぁ-んァ-ヶ一-龠々ー]'
 
 commit_message_prefix() {
@@ -40,22 +39,6 @@ commit_message_subject_is_valid() {
   [ -n "$scope" ] || return 1
   [ "$scope: $description" = "$subject" ] || return 1
   printf '%s\n' "$scope" | grep -qE '^[^[:space:]:/]+(/[^[:space:]:/]+)*$' || return 1
-  [ -n "$description" ] && printf '%s\n' "$description" | grep -qE "$COMMIT_MESSAGE_JAPANESE_RE"
-}
-
-commit_message_subject_is_valid() {
-  subject=$1
-  agent_prefix="[$COMMIT_MESSAGE_AGENT]: "
-
-  case "$subject" in
-    "$agent_prefix"*) scoped_description=${subject#"$agent_prefix"} ;;
-    *) return 1 ;;
-  esac
-
-  scope=${scoped_description%%/*}
-  description=${scoped_description#*/}
-  [ "$scope" != "$scoped_description" ] || return 1
-  printf '%s\n' "$scope" | grep -qE '^[^[:space:]/]+(/[^[:space:]/]+)*$' || return 1
   [ -n "$description" ] && printf '%s\n' "$description" | grep -qE "$COMMIT_MESSAGE_JAPANESE_RE"
 }
 
