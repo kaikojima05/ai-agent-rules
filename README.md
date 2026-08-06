@@ -124,7 +124,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 - 本リポジトリはテンプレートなので、`init-agent` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - placeholder の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れ検証は `init-agent.sh` 内で完結させる。
 - Claude Code は `AGENTS.md` を自動読み込みしない（`CLAUDE.md` のみ）。そのため `claude/CLAUDE.md`（中身は `@AGENTS.md`）を配置時にプロジェクトルートへ展開して読ませる。codex は `AGENTS.md` を直読みするため不要。
-- Codex は `distributed` permission profile で通常の workspace 書き込みを許可し、`.git` / `.codex` / `.agents` とレビュー対象パスを保護する。設定更新は配布rulesが限定allowする固定スクリプトだけを使い、汎用の `cp` / `sed` に例外を与えない。
+- Codex は `distributed` permission profile で通常の workspace 書き込みを許可し、`.git` / `.codex` / `.agents` を保護する。レビュー対象パスは、配布rulesが毎回確認する承認コマンドと1回限りのhook tokenで保護する。設定更新は限定allowした固定スクリプトだけを使い、汎用の `cp` / `sed` に例外を与えない。
 - Codex の hook は**配置しただけでは実行されない**。`/hooks` で現在の定義をレビューして信頼すること。未信頼のhookはスキップされる（検証用の一時迂回フラグは `--dangerously-bypass-hook-trust`）。
 
 ## 承認の挙動
@@ -153,7 +153,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | 操作 | Claude Code | Codex |
 |---|---|---|
 | localhost を含むHTTP request | sandbox外承認 | permission profileのnetwork無効化によりsandbox外承認 |
-| `package.json` / CI / migration 等のpath単位確認 | settingsのaskで強制 | permission profileでreadへ降格し書き込み時に承認 |
+| `package.json` / CI / migration 等のpath単位確認 | settingsのaskで強制 | rulesのpromptで1回限りの変更tokenを発行 |
 | 既存ファイルの全面Write | `guard-overwrite.sh`でask | `apply_patch`は部分差分。opaque shellはrulesでprompt |
 | 設定・skillの更新 | sandbox除外済み固定スクリプト | rulesでallowした固定スクリプト |
 | MCPの未登録tool | Claudeの既定確認 | `default_tools_approval_mode = "prompt"` |
@@ -170,6 +170,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 - `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-agent-config.sh`
 - 機密ファイル（`.env` / `.env.*`）の書き込み・削除の封じ込め → `hooks/shell/protect-env.sh`（sandbox / permission profile との二重層）
 - lockfile の編集ツール・Bash直接変更を拒否 → `hooks/shell/protect-lockfiles.sh`（permission設定との二重層）
+- レビュー対象ファイルの未承認変更を拒否し、Codexではpath単位の1回限り承認を消費 → `hooks/shell/protect-review-files.sh`
 - コミット契約（stage厳密1件・対象ファイル名一致・日本語・AI署名禁止）の執行 → `hooks/shell/enforce-agent-commit.sh`
 
 ## テスト
