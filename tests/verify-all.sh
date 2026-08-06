@@ -172,8 +172,15 @@ cd "$S/claude-sim"
 if bash .claude/skills/init-agent/init-agent.sh claude > init-claude.log 2>&1; then ok "init-agent claude 実行"; else ng "init-agent claude 実行"; cat init-claude.log; fi
 bash -n .claude/hooks/shell/require-test.sh 2>/dev/null && ok "解決後 require-test 構文" || ng "解決後 require-test 構文"
 grep -q 'HOOK_AGENT="claude"' .claude/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=claude" || ng "hook-io HOOK_AGENT=claude"
-grep -q '`\[claude\]: {対象ファイル名}/{変更内容}`' AGENTS.md && ok "AGENTS.md コミットタグ確定" || ng "AGENTS.md コミットタグ確定"
-grep -q 'AGENT_TAG="claude"' .claude/skills/rebase-squash/rebase-squash.sh && ok "rebase-squash AGENT_TAG=claude" || ng "rebase-squash AGENT_TAG=claude"
+if ! grep -q '\[\[agent_name\]\]' AGENTS.md && \
+   [ "$(bash .claude/hooks/shell/commit-message-contract.sh --prefix foo.ts)" = "[claude]: foo.ts/" ] && \
+   bash .claude/hooks/shell/commit-message-contract.sh --validate '[claude]: feature/日本語の説明' && \
+   ! bash .claude/hooks/shell/commit-message-contract.sh --validate '[claude]: feature/english only' && \
+   grep -q 'COMMIT_MESSAGE_CONTRACT=.*\.claude/hooks/shell/commit-message-contract.sh' .claude/skills/rebase-squash/rebase-squash.sh; then
+  ok "commit-message契約をhookが一元生成・検証"
+else
+  ng "commit-message契約のhook一元化が不正"
+fi
 grep -q 'bash .claude/skills/rebase-squash/rebase-squash.sh' .claude/skills/rebase-squash/SKILL.md && ok "[skills_root]→.claude/skills" || ng "[skills_root]→.claude/skills"
 LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
 [ "$LEFT" = "0" ] && ok "置換漏れゼロ(claude)" || { ng "置換漏れ $LEFT 件(claude)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude | grep -v '/init-agent/'; }
@@ -318,11 +325,17 @@ cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
 cd "$S/codex-sim"
 git init -q
 if bash .agents/skills/init-agent/init-agent.sh codex > init-codex.log 2>&1; then ok "init-agent codex 実行"; else ng "init-agent codex 実行"; cat init-codex.log; fi
-grep -q '`\[codex\]: {対象ファイル名}/{変更内容}`' AGENTS.md && ok "AGENTS.md → [codex]:" || ng "AGENTS.md → [codex]:"
+if [ "$(bash .codex/hooks/shell/commit-message-contract.sh --prefix foo.ts)" = "[codex]: foo.ts/" ] && \
+   bash .codex/hooks/shell/commit-message-contract.sh --validate '[codex]: feature/日本語の説明' && \
+   ! bash .codex/hooks/shell/commit-message-contract.sh --validate '[codex]: feature/english only'; then
+  ok "commit-message契約をCodex hookが一元生成・検証"
+else
+  ng "commit-message契約のCodex hook一元化が不正"
+fi
 grep -q 'HOOK_AGENT="codex"' .codex/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=codex" || ng "hook-io HOOK_AGENT=codex"
 grep -q '"\$TOOL" = "apply_patch"' .codex/hooks/shell/require-test.sh && ok "[NOTE]→apply_patch" || ng "[NOTE]→apply_patch"
 grep -q 'bash .agents/skills/rebase-squash/rebase-squash.sh' .agents/skills/rebase-squash/SKILL.md && ok "[skills_root]→.agents/skills" || ng "[skills_root]→.agents/skills"
-grep -q 'AGENT_TAG="codex"' .agents/skills/rebase-squash/rebase-squash.sh && ok "rebase-squash AGENT_TAG=codex" || ng "rebase-squash AGENT_TAG=codex"
+grep -q 'COMMIT_MESSAGE_CONTRACT=.*\.codex/hooks/shell/commit-message-contract.sh' .agents/skills/rebase-squash/rebase-squash.sh && ok "rebase-squash はCodex hook契約を参照" || ng "rebase-squash のCodex hook契約参照が無い"
 LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
 [ "$LEFT" = "0" ] && ok "置換漏れゼロ(codex)" || { ng "置換漏れ $LEFT 件(codex)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents | grep -v '/init-agent/'; }
 printf 'codex e2e plan\n' > "$S/e2e-plan.md"
