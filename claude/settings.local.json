@@ -28,6 +28,8 @@
       "Bash(bash .claude/skills/cowlick/apply-prompt.sh:*)",
       "Bash(bash .claude/skills/run-agent/mark-prompt-done.sh)",
       "Bash(bash .claude/skills/run-agent/mark-prompt-done.sh:*)",
+      "Bash(bash .claude/skills/clean-code/quality-gate.sh)",
+      "Bash(bash .claude/skills/clean-code/quality-gate.sh:*)",
       "Bash(bash .claude/skills/run-agent/delegate-deepseek.sh)",
       "Bash(bash .claude/skills/run-agent/delegate-deepseek.sh:*)",
       "Bash(bash .claude/skills/e2e/apply-e2e-plan.sh)",
