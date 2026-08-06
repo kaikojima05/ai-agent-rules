@@ -112,6 +112,13 @@ grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "De
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
 grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny"' "$DS" && ok "DeepSeek smoke: hello固定・tool全拒否" || ng "DeepSeek smokeのpromptまたは権限が不正"
 
+INIT_AGENT_SKILL="$REPO/skills/init-agent/SKILL.md"
+if grep -q '^allowed-tools: Bash$' "$INIT_AGENT_SKILL" && grep -q '最初のツール呼び出しで Step 3' "$INIT_AGENT_SKILL"; then
+  ok "init-agent: 初期化scriptを最初のtool呼び出しに固定"
+else
+  ng "init-agent: 初期化前の不要なtool呼び出しを許可"
+fi
+
 echo "== 設計pipelineのskill境界 =="
 MEETING_SKILL="$REPO/skills/meeting/SKILL.md"
 PREFLIGHT_SKILL="$REPO/skills/preflight/SKILL.md"
