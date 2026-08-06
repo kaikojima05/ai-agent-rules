@@ -175,14 +175,14 @@ git config user.email tester@example.com
 git config user.name tester
 printf 'foo\n' > foo.ts
 git add foo.ts
-check "commit-gate: 契約形式コミットは棄権" empty commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
-check "commit-gate: ファイル名不一致は deny" deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: bar.ts/バグを直した\""}}'
-check "commit-gate: 英語だけの変更内容は deny" deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/fix bug\""}}'
+check "commit-gate: 契約形式コミットは棄権" empty commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"foo.ts: バグを直した\""}}'
+check "commit-gate: ファイル名不一致は deny" deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"bar.ts: バグを直した\""}}'
+check "commit-gate: 英語だけの変更内容は deny" deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"foo.ts: fix bug\""}}'
 check "commit-gate: 形式違反は deny"          deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix bug\""}}'
-check "commit-gate: amend は deny"            deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit --amend -m \"[claude]: foo.ts/修正した\""}}'
+check "commit-gate: amend は deny"            deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit --amend -m \"foo.ts: 修正した\""}}'
 printf 'bar\n' > bar.ts
 git add bar.ts
-check "commit-gate: 複数stageは deny"          deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
+check "commit-gate: 複数stageは deny"          deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"foo.ts: バグを直した\""}}'
 cd ..
 
 # --- overwrite ---
