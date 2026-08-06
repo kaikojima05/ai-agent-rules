@@ -24,19 +24,19 @@ prefix_rule(
     justification = "polish完了時の現在HEADと作業ツリー状態だけを一時receiptへ記録・検証します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/conductor/delegate-deepseek.sh"],
+    pattern = ["bash", ".agents/skills/deepseek/delegate.sh"],
     decision = "allow",
     justification = "予算・ZDR・編集先を固定検証してDeepSeekを隔離worktreeで実行します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/conductor/delegate-deepseek.sh", "smoke"],
+    pattern = ["bash", ".agents/skills/deepseek/delegate.sh", "smoke"],
     decision = "prompt",
     justification = "従量課金の下位モデルへhelloを送るsmoke testを実行するか確認します。",
     match = [
-        "bash .agents/skills/conductor/delegate-deepseek.sh smoke",
+        "bash .agents/skills/deepseek/delegate.sh smoke",
     ],
     not_match = [
-        "bash .agents/skills/conductor/delegate-deepseek.sh research task-id spec.md",
+        "bash .agents/skills/deepseek/delegate.sh research task-id spec.md",
     ],
 )
 prefix_rule(
