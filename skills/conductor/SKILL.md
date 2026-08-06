@@ -105,13 +105,13 @@ Codexでは`.codex/rules/default.rules`、Claude Codeでは`settings.json`がこ
 
 ```bash
 # 読み取り専用調査
-bash [skills_root]/conductor/delegate-deepseek.sh research <task-id> <設計書>
+bash [skills_root]/deepseek/delegate.sh research <task-id> <設計書>
 
 # 隔離worktreeで本体コードだけ実装
-bash [skills_root]/conductor/delegate-deepseek.sh implement <task-id> <設計書> <許可する本体コード>...
+bash [skills_root]/deepseek/delegate.sh implement <task-id> <設計書> <許可する本体コード>...
 
 # OpenCode・OpenRouter・対象モデルへの疎通だけ確認
-bash [skills_root]/conductor/delegate-deepseek.sh smoke
+bash [skills_root]/deepseek/delegate.sh smoke
 ```
 
 実行器はOpenRouterの対象期間使用量38 USDで停止し、API keyに40 USD以下の月次またはリセットなしhard limitがあることを検証する。ZDRと`data_collection: deny`をリクエストでも強制し、OpenCodeの外部プラグインを無効化する。
