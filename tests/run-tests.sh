@@ -67,60 +67,60 @@ check "require-test: テスト有り ts は棄権"    empty require-test.sh '{"t
 check "require-test: tsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.tsx"}}'
 check "require-test: Bash は棄権"             empty require-test.sh '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
 
-# --- protect-git-dir ---
-check "protect-git-dir: rm .git は deny"      deny  protect-git-dir.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .git"}}'
-check "protect-git-dir: Edit .git/config は deny" deny protect-git-dir.sh '{"tool_name":"Edit","tool_input":{"file_path":".git/config"}}'
-check "protect-git-dir: 通常 Edit は棄権"     empty protect-git-dir.sh '{"tool_name":"Edit","tool_input":{"file_path":"src/a.ts"}}'
-check "protect-git-dir: git status は棄権"    empty protect-git-dir.sh '{"tool_name":"Bash","tool_input":{"command":"git status"}}'
+# --- protect-git ---
+check "protect-git: rm .git は deny"      deny  protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .git"}}'
+check "protect-git: Edit .git/config は deny" deny protect-git.sh '{"tool_name":"Edit","tool_input":{"file_path":".git/config"}}'
+check "protect-git: 通常 Edit は棄権"     empty protect-git.sh '{"tool_name":"Edit","tool_input":{"file_path":"src/a.ts"}}'
+check "protect-git: git status は棄権"    empty protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"git status"}}'
 
-# --- protect-agent-config ---
-check "agent-config: Edit .claude は deny"    deny  protect-agent-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/settings.json"}}'
-check "agent-config: Edit .agents は deny"    deny  protect-agent-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".agents/skills/foo/SKILL.md"}}'
-check "agent-config: rm .claude は deny"      deny  protect-agent-config.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .claude"}}'
-check "agent-config: 設定読み取りは棄権"      empty protect-agent-config.sh '{"tool_name":"Bash","tool_input":{"command":"cat .claude/settings.json"}}'
-check "agent-config: 設定script起動は棄権"    empty protect-agent-config.sh '{"tool_name":"Bash","tool_input":{"command":"bash .claude/skills/init-agent/init-agent.sh claude"}}'
+# --- protect-config ---
+check "config: Edit .claude は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/settings.json"}}'
+check "config: Edit .agents は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".agents/skills/foo/SKILL.md"}}'
+check "config: rm .claude は deny"      deny  protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .claude"}}'
+check "config: 設定読み取りは棄権"      empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"cat .claude/settings.json"}}'
+check "config: 設定script起動は棄権"    empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"bash .claude/skills/bootstrap/init-agent.sh claude"}}'
 
-# --- deny-history-rewrite ---
-check "history-rewrite: git rebase は deny"   deny  deny-history-rewrite.sh '{"tool_name":"Bash","tool_input":{"command":"git rebase -i HEAD~3"}}'
-check "history-rewrite: force push は deny"   deny  deny-history-rewrite.sh '{"tool_name":"Bash","tool_input":{"command":"git push -f origin master"}}'
-check "history-rewrite: git commit は棄権"    empty deny-history-rewrite.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m msg"}}'
+# --- deny-history ---
+check "history: git rebase は deny"   deny  deny-history.sh '{"tool_name":"Bash","tool_input":{"command":"git rebase -i HEAD~3"}}'
+check "history: force push は deny"   deny  deny-history.sh '{"tool_name":"Bash","tool_input":{"command":"git push -f origin master"}}'
+check "history: git commit は棄権"    empty deny-history.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m msg"}}'
 
-# --- deny-inline-eval ---
-check "inline-eval: python3 -c は deny"       deny  deny-inline-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 -c import_os"}}'
-check "inline-eval: node -e は deny"          deny  deny-inline-eval.sh '{"tool_name":"Bash","tool_input":{"command":"node -e code"}}'
-check "inline-eval: python3 foo.py は棄権"    empty deny-inline-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 foo.py"}}'
+# --- deny-eval ---
+check "eval: python3 -c は deny"       deny  deny-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 -c import_os"}}'
+check "eval: node -e は deny"          deny  deny-eval.sh '{"tool_name":"Bash","tool_input":{"command":"node -e code"}}'
+check "eval: python3 foo.py は棄権"    empty deny-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 foo.py"}}'
 
-# --- normalize-readonly-search ---
+# --- readonly-search ---
 check_bash_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
   "rg --no-messages -n 'foo|bar' front --glob '!generated/**'" \
-  normalize-readonly-search.sh \
+  readonly-search.sh \
   "rg -n 'foo|bar' front --glob '!generated/**' 2>/dev/null"
 check_bash_rewrite "readonly-search: findのstderr破棄を許可" \
   "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null" \
-  normalize-readonly-search.sh \
+  readonly-search.sh \
   "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null"
 check_bash_rewrite "readonly-search: stdoutのdev null破棄を許可" \
   "nl -ba src/foo.ts >/dev/null" \
-  normalize-readonly-search.sh \
+  readonly-search.sh \
   "nl -ba src/foo.ts > /dev/null"
 check_bash_rewrite "readonly-search: Codexのquote済みrgを直接実行へ正規化" \
   "rg '-n' '^(model|enum) |@@(?:unique|index|map)' 'front/prisma/schema.prisma'" \
-  normalize-readonly-search.sh \
+  readonly-search.sh \
   "'rg' '-n' '^(model|enum) |@@(?:unique|index|map)' 'front/prisma/schema.prisma'"
 check_bash_rewrite "readonly-search: quote済みrgのglob引数を保持" \
   "rg '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'" \
-  normalize-readonly-search.sh \
+  readonly-search.sh \
   "'rg' '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'"
-check_bash_group "readonly-search: 安全な単一コマンドを明示allow" allow normalize-readonly-search.sh \
+check_bash_group "readonly-search: 安全な単一コマンドを明示allow" allow readonly-search.sh \
   "rg 'foo|bar' src" \
   "find src -maxdepth 2 -type f -print" \
   "cat src/foo.ts" \
   "nl -ba src/foo.ts" \
   "sort src/files.txt"
-check_bash_group "readonly-search: allow対象外の単一コマンドは棄権" empty normalize-readonly-search.sh \
+check_bash_group "readonly-search: allow対象外の単一コマンドは棄権" empty readonly-search.sh \
   "sed -n '1,240p' src/foo.ts" \
   'echo "$VALUE" 2>&1'
-check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny normalize-readonly-search.sh \
+check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny readonly-search.sh \
   "rg --files src | sort" \
   "'rg' '--files' 'src' | 'sort'" \
   "find src -type f -print 2>/dev/null | sort" \
@@ -135,7 +135,7 @@ check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny nor
   "bash --noprofile -c 'pwd; ls'" \
   "sleep 1 & echo done" \
   'for f in a.ts b.ts; do if test -f "$f"; then sed -n '\''1,240p'\'' "$f"; fi; done; rg --files src | rg '\''smtp|s3'\'''
-check_bash_group "readonly-search: 危険な読み取りoptionを拒否" deny normalize-readonly-search.sh \
+check_bash_group "readonly-search: 危険な読み取りoptionを拒否" deny readonly-search.sh \
   "find tmp -type f -delete" \
   "'find' 'tmp' '-type' 'f' '-delete'" \
   "/usr/bin/find tmp -type f -delete" \
@@ -151,23 +151,23 @@ check_bash_group "readonly-search: 危険な読み取りoptionを拒否" deny no
   "rg --pre=preprocess.sh pattern src" \
   "git diff --output=result.patch" \
   "git show --output=result.txt HEAD"
-check_bash_group "readonly-search: 通常fileへのredirectはpermission層へ委任" empty normalize-readonly-search.sh \
+check_bash_group "readonly-search: 通常fileへのredirectはpermission層へ委任" empty readonly-search.sh \
   "cat src/foo.ts > result.txt" \
   "rg foo > result.txt 2>/dev/null"
 
-# --- deny-registry-fetch ---
-check "registry-fetch: npx は deny"           deny  deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"npx create-app"}}'
-check "registry-fetch: npm install は deny"   deny  deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"npm install left-pad"}}'
-check "registry-fetch: yarn build は棄権"     empty deny-registry-fetch.sh '{"tool_name":"Bash","tool_input":{"command":"yarn build"}}'
+# --- deny-registry ---
+check "registry: npx は deny"           deny  deny-registry.sh '{"tool_name":"Bash","tool_input":{"command":"npx create-app"}}'
+check "registry: npm install は deny"   deny  deny-registry.sh '{"tool_name":"Bash","tool_input":{"command":"npm install left-pad"}}'
+check "registry: yarn build は棄権"     empty deny-registry.sh '{"tool_name":"Bash","tool_input":{"command":"yarn build"}}'
 
-# --- enforce-agent-commit ---
-check "agent-commit: git add -A は deny"       deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git add -A"}}'
-check_bash_group "agent-commit: 強制stage は deny" deny enforce-agent-commit.sh \
+# --- commit-gate ---
+check "commit-gate: git add -A は deny"       deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git add -A"}}'
+check_bash_group "commit-gate: 強制stage は deny" deny commit-gate.sh \
   "git add -f ignored.test.ts" \
   "git add --force ignored.test.ts" \
   "git add ignored.test.ts -f"
-check "agent-commit: plain push は deny"       deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}'
-check "agent-commit: cherry-pick は deny"      deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git cherry-pick abc123"}}'
+check "commit-gate: plain push は deny"       deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}'
+check "commit-gate: cherry-pick は deny"      deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git cherry-pick abc123"}}'
 mkdir -p commit-fixture
 cd commit-fixture
 git init -q
@@ -175,24 +175,24 @@ git config user.email tester@example.com
 git config user.name tester
 printf 'foo\n' > foo.ts
 git add foo.ts
-check "agent-commit: 契約形式コミットは棄権" empty enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
-check "agent-commit: ファイル名不一致は deny" deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: bar.ts/バグを直した\""}}'
-check "agent-commit: 英語だけの変更内容は deny" deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/fix bug\""}}'
-check "agent-commit: 形式違反は deny"          deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix bug\""}}'
-check "agent-commit: amend は deny"            deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit --amend -m \"[claude]: foo.ts/修正した\""}}'
+check "commit-gate: 契約形式コミットは棄権" empty commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
+check "commit-gate: ファイル名不一致は deny" deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: bar.ts/バグを直した\""}}'
+check "commit-gate: 英語だけの変更内容は deny" deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/fix bug\""}}'
+check "commit-gate: 形式違反は deny"          deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix bug\""}}'
+check "commit-gate: amend は deny"            deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit --amend -m \"[claude]: foo.ts/修正した\""}}'
 printf 'bar\n' > bar.ts
 git add bar.ts
-check "agent-commit: 複数stageは deny"          deny  enforce-agent-commit.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
+check "commit-gate: 複数stageは deny"          deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"[claude]: foo.ts/バグを直した\""}}'
 cd ..
 
-# --- guard-overwrite ---
+# --- overwrite ---
 echo x > untracked.txt
-check "guard-overwrite: git 管理外の上書きは ask" ask guard-overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/untracked.txt"}}'
-check "guard-overwrite: 新規作成は棄権"       empty guard-overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/nonexistent.txt"}}'
+check "overwrite: git 管理外の上書きは ask" ask overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/untracked.txt"}}'
+check "overwrite: 新規作成は棄権"       empty overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/nonexistent.txt"}}'
 
-# --- prototype-guard ---
-check "prototype-guard: テストファイルは deny" deny prototype-guard.sh '{"tool_name":"Write","tool_input":{"file_path":"src/foo.test.ts"}}'
-check "prototype-guard: 通常ファイルは棄権"   empty prototype-guard.sh '{"tool_name":"Write","tool_input":{"file_path":"src/foo.ts"}}'
+# --- prototype ---
+check "prototype: テストファイルは deny" deny prototype.sh '{"tool_name":"Write","tool_input":{"file_path":"src/foo.test.ts"}}'
+check "prototype: 通常ファイルは棄権"   empty prototype.sh '{"tool_name":"Write","tool_input":{"file_path":"src/foo.ts"}}'
 
 # --- protect-env ---
 check "protect-env: Edit .env は deny"        deny  protect-env.sh '{"tool_name":"Edit","tool_input":{"file_path":".env"}}'
@@ -202,29 +202,29 @@ check "protect-env: rm .env は deny"          deny  protect-env.sh '{"tool_name
 check "protect-env: リダイレクト書き込みは deny" deny protect-env.sh '{"tool_name":"Bash","tool_input":{"command":"echo A=1 > .env"}}'
 check "protect-env: cat .env は棄権"          empty protect-env.sh '{"tool_name":"Bash","tool_input":{"command":"cat .env"}}'
 
-# --- protect-lockfiles ---
-check "protect-lockfiles: Edit yarn.lock は deny" deny protect-lockfiles.sh '{"tool_name":"Edit","tool_input":{"file_path":"yarn.lock"}}'
-check "protect-lockfiles: Bash 上書きは deny" deny protect-lockfiles.sh '{"tool_name":"Bash","tool_input":{"command":"echo x > package-lock.json"}}'
-check "protect-lockfiles: 読み取りは棄権" empty protect-lockfiles.sh '{"tool_name":"Bash","tool_input":{"command":"cat pnpm-lock.yaml"}}'
+# --- protect-locks ---
+check "protect-locks: Edit yarn.lock は deny" deny protect-locks.sh '{"tool_name":"Edit","tool_input":{"file_path":"yarn.lock"}}'
+check "protect-locks: Bash 上書きは deny" deny protect-locks.sh '{"tool_name":"Bash","tool_input":{"command":"echo x > package-lock.json"}}'
+check "protect-locks: 読み取りは棄権" empty protect-locks.sh '{"tool_name":"Bash","tool_input":{"command":"cat pnpm-lock.yaml"}}'
 
 # --- hook-io フェイルクローズ(未実装エージェント = claude/codex 以外) ---
 # 契約: exit 1 は PreToolUse で non-blocking error 扱い = fail-open になるため、
 #       PreToolUse には deny 決定 JSON + exit 0 で止める。PreToolUse 以外のイベントは
 #       exit 0 の stdout がプロンプトへ注入されるため JSON を出さず棄権する。
-#       例外は init-agent.sh の 1 コマンドのみ（placeholder を解決する初期化自身を止めない）。
+#       例外は bootstrap の 1 コマンドのみ（placeholder を解決する初期化自身を止めない）。
 sed 's/^HOOK_AGENT="claude"/HOOK_AGENT="github"/' "$H/hook-io.sh" > "$H/hook-io.sh.github"
 mv "$H/hook-io.sh" "$H/hook-io.sh.orig" && mv "$H/hook-io.sh.github" "$H/hook-io.sh"
 
-OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash "$H/deny-history-rewrite.sh"); RC=$?
+OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash "$H/deny-history.sh"); RC=$?
 if [ "$RC" -eq 0 ] && [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
   PASS=$((PASS+1)); echo "ok   hook-io: 未実装エージェントは deny JSON + exit 0"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: 未実装エージェント rc=$RC out=[$OUT]"; fi
 
-OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash ./skills/init-agent/init-agent.sh codex"}}' | bash "$H/deny-history-rewrite.sh"); RC=$?
-if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: 未実装でも init-agent.sh は棄権"
-else FAIL=$((FAIL+1)); echo "FAIL hook-io: init-agent 例外 rc=$RC out=[$OUT]"; fi
+OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash ./skills/bootstrap/init-agent.sh codex"}}' | bash "$H/deny-history.sh"); RC=$?
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: 未実装でも bootstrap は棄権"
+else FAIL=$((FAIL+1)); echo "FAIL hook-io: bootstrap例外 rc=$RC out=[$OUT]"; fi
 
-OUT=$(echo '{"hook_event_name":"UserPromptSubmit","prompt":"git rebase して"}' | bash "$H/deny-history-rewrite.sh"); RC=$?
+OUT=$(echo '{"hook_event_name":"UserPromptSubmit","prompt":"git rebase して"}' | bash "$H/deny-history.sh"); RC=$?
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: PreToolUse 以外は JSON を出さず棄権"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: 非 PreToolUse rc=$RC out=[$OUT]"; fi
 

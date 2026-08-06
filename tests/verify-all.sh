@@ -2,7 +2,7 @@
 # テンプレート全体の回帰テスト。hook・スキル・配布設定を変更したら必ず走らせること。
 #   bash tests/verify-all.sh
 # 検証内容: 構文 / 実行ビット / claude 配置シム / hook 全数(run-tests.sh) /
-#           rebase-squash E2E / codex 配布物・rules 実機検査 / skill-session スコープ / 残渣チェック
+#           rebase E2E / codex 配布物・rules 実機検査 / session スコープ / 残渣チェック
 # 作業ファイルは一時ディレクトリに作りリポジトリを汚さない（終了時に自動削除）。
 set -u
 SUITE="$(cd "$(dirname "$0")" && pwd)"
@@ -101,7 +101,7 @@ for f in "$REPO"/hooks/shell/*.sh; do
   case "$f" in */hook-io.sh) continue ;; esac
   [ -x "$f" ] || append_group_failure "exec bit: $f"
 done
-DS="$REPO/skills/run-agent/delegate-deepseek.sh"
+DS="$REPO/skills/conductor/delegate-deepseek.sh"
 [ -x "$DS" ] || append_group_failure "exec bit: $DS"
 report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 grep -q 'SOFT_BUDGET_USD="38"' "$DS" && grep -q 'HARD_BUDGET_USD="40"' "$DS" && ok "DeepSeek予算: soft=38 hard=40" || ng "DeepSeek予算が不正"
@@ -113,11 +113,11 @@ grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && 
 grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny"' "$DS" && ok "DeepSeek smoke: hello固定・tool全拒否" || ng "DeepSeek smokeのpromptまたは権限が不正"
 grep -q '^  nesting)' "$DS" && grep -q '修正案・コード変更は不要です' "$DS" && grep -q 'nesting path must be tracked' "$DS" && ok "DeepSeek nesting: 本体コードだけを読み取り検出" || ng "DeepSeek nesting検出モードが不正"
 
-INIT_AGENT_SKILL="$REPO/skills/init-agent/SKILL.md"
-if grep -q '^allowed-tools: Bash$' "$INIT_AGENT_SKILL" && grep -q '最初のツール呼び出しで Step 3' "$INIT_AGENT_SKILL"; then
-  ok "init-agent: 初期化scriptを最初のtool呼び出しに固定"
+BOOTSTRAP_SKILL="$REPO/skills/bootstrap/SKILL.md"
+if grep -q '^allowed-tools: Bash$' "$BOOTSTRAP_SKILL" && grep -q '最初のツール呼び出しで Step 3' "$BOOTSTRAP_SKILL"; then
+  ok "bootstrap: 初期化scriptを最初のtool呼び出しに固定"
 else
-  ng "init-agent: 初期化前の不要なtool呼び出しを許可"
+  ng "bootstrap: 初期化前の不要なtool呼び出しを許可"
 fi
 
 echo "== 設計pipelineのskill境界 =="
@@ -163,25 +163,25 @@ for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
 done
 report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 
-echo "== run-agent の最終品質ゲート =="
-CLEAN_CODE_SKILL="$REPO/skills/clean-code/SKILL.md"
-NESTING_REVIEW_SKILL="$REPO/skills/nesting-review/SKILL.md"
-RUN_AGENT_SKILL="$REPO/skills/run-agent/SKILL.md"
-QUALITY_GATE_SCRIPT="$REPO/skills/clean-code/quality-gate.sh"
-MARK_PROMPT_DONE_SCRIPT="$REPO/skills/run-agent/mark-prompt-done.sh"
-[ -f "$NESTING_REVIEW_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/nesting-review" >/dev/null && ok "nesting-review スキルが有効" || ng "nesting-review スキルが無効"
-grep -Fq 'Skill(nesting-review)' "$CLEAN_CODE_SKILL" && grep -q '必ず呼ぶ' "$CLEAN_CODE_SKILL" && ok "clean-code はnesting-reviewを必須化" || ng "clean-code のnesting-review連携が無い"
-grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$NESTING_REVIEW_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$NESTING_REVIEW_SKILL" && ok "nesting-review は見せかけの関数抽出を禁止" || ng "nesting-review の関数抽出禁止が無い"
-grep -Fq 'delegate-deepseek.sh nesting' "$NESTING_REVIEW_SKILL" && grep -q '自力検出へ切り替えず' "$NESTING_REVIEW_SKILL" && grep -q 'DeepSeek が検出した' "$CLEAN_CODE_SKILL" && ok "nesting-review は検出をDeepSeekへ専任" || ng "nesting-review の検出責務分離が無い"
-[ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$CLEAN_CODE_SKILL" && ok "clean-code の品質receipt記録器が有効" || ng "clean-code の品質receipt記録器が無い"
-grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$RUN_AGENT_SKILL" && ok "run-agent の完了更新は品質receiptを検証" || ng "run-agent の品質receipt検証が無い"
-if grep -Fq 'Skill(clean-code)' "$RUN_AGENT_SKILL" && \
-   grep -q 'index更新と最終報告の前に `clean-code` を自動で実行する' "$RUN_AGENT_SKILL" && \
-   ! grep -q 'nesting-review' "$RUN_AGENT_SKILL" && \
-   [ "$(grep -n 'index更新と最終報告の前に `clean-code` を自動で実行する' "$RUN_AGENT_SKILL" | cut -d: -f1)" -lt "$(grep -n '^### 6\. indexを完了へ変更する' "$RUN_AGENT_SKILL" | cut -d: -f1)" ]; then
-  ok "run-agent はclean-codeだけを最終品質ゲートにする"
+echo "== conductor の最終品質ゲート =="
+POLISH_SKILL="$REPO/skills/polish/SKILL.md"
+UNWIND_SKILL="$REPO/skills/unwind/SKILL.md"
+CONDUCTOR_SKILL="$REPO/skills/conductor/SKILL.md"
+QUALITY_GATE_SCRIPT="$REPO/skills/polish/quality-gate.sh"
+MARK_PROMPT_DONE_SCRIPT="$REPO/skills/conductor/mark-prompt-done.sh"
+[ -f "$UNWIND_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/unwind" >/dev/null && ok "unwind スキルが有効" || ng "unwind スキルが無効"
+grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
+grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
+grep -Fq 'delegate-deepseek.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && ok "unwind は検出をDeepSeekへ専任" || ng "unwind の検出責務分離が無い"
+[ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$POLISH_SKILL" && ok "polish の品質receipt記録器が有効" || ng "polish の品質receipt記録器が無い"
+grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$CONDUCTOR_SKILL" && ok "conductor の完了更新は品質receiptを検証" || ng "conductor の品質receipt検証が無い"
+if grep -Fq 'Skill(polish)' "$CONDUCTOR_SKILL" && \
+   grep -q 'index更新と最終報告の前に `polish` を自動で実行する' "$CONDUCTOR_SKILL" && \
+   ! grep -q 'unwind' "$CONDUCTOR_SKILL" && \
+   [ "$(grep -n 'index更新と最終報告の前に `polish` を自動で実行する' "$CONDUCTOR_SKILL" | cut -d: -f1)" -lt "$(grep -n '^### 6\. indexを完了へ変更する' "$CONDUCTOR_SKILL" | cut -d: -f1)" ]; then
+  ok "conductor はpolishだけを最終品質ゲートにする"
 else
-  ng "run-agent のclean-code品質ゲートの依存が不正"
+  ng "conductor のpolish品質ゲートの依存が不正"
 fi
 
 echo "== 2. claude 配置シミュレーション =="
@@ -195,26 +195,26 @@ git init -q
 git config user.email tester@example.com
 git config user.name tester
 git commit --allow-empty -qm "test: 品質ゲートfixtureを初期化"
-if bash .claude/skills/init-agent/init-agent.sh claude > init-claude.log 2>&1; then ok "init-agent claude 実行"; else ng "init-agent claude 実行"; cat init-claude.log; fi
+if bash .claude/skills/bootstrap/init-agent.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 bash -n .claude/hooks/shell/require-test.sh 2>/dev/null && ok "解決後 require-test 構文" || ng "解決後 require-test 構文"
 grep -q 'HOOK_AGENT="claude"' .claude/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=claude" || ng "hook-io HOOK_AGENT=claude"
 if ! grep -q '\[\[agent_name\]\]' AGENTS.md && \
-   [ "$(bash .claude/hooks/shell/commit-message-contract.sh --prefix foo.ts)" = "[claude]: foo.ts/" ] && \
-   bash .claude/hooks/shell/commit-message-contract.sh --validate '[claude]: feature/日本語の説明' && \
-   ! bash .claude/hooks/shell/commit-message-contract.sh --validate '[claude]: feature/english only' && \
-   grep -q 'COMMIT_MESSAGE_CONTRACT=.*\.claude/hooks/shell/commit-message-contract.sh' .claude/skills/rebase-squash/rebase-squash.sh; then
+   [ "$(bash .claude/hooks/shell/commit-subject.sh --prefix foo.ts)" = "[claude]: foo.ts/" ] && \
+   bash .claude/hooks/shell/commit-subject.sh --validate '[claude]: feature/日本語の説明' && \
+   ! bash .claude/hooks/shell/commit-subject.sh --validate '[claude]: feature/english only' && \
+   grep -q 'COMMIT_MESSAGE_CONTRACT=.*\.claude/hooks/shell/commit-subject.sh' .claude/skills/rebase/rebase.sh; then
   ok "commit-message契約をhookが一元生成・検証"
 else
   ng "commit-message契約のhook一元化が不正"
 fi
-grep -q 'bash .claude/skills/rebase-squash/rebase-squash.sh' .claude/skills/rebase-squash/SKILL.md && ok "[skills_root]→.claude/skills" || ng "[skills_root]→.claude/skills"
-LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
-[ "$LEFT" = "0" ] && ok "置換漏れゼロ(claude)" || { ng "置換漏れ $LEFT 件(claude)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude | grep -v '/init-agent/'; }
+grep -q 'bash .claude/skills/rebase/rebase.sh' .claude/skills/rebase/SKILL.md && ok "[skills_root]→.claude/skills" || ng "[skills_root]→.claude/skills"
+LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude 2>/dev/null | grep -v '/bootstrap/' | wc -l | tr -d ' ')
+[ "$LEFT" = "0" ] && ok "置換漏れゼロ(claude)" || { ng "置換漏れ $LEFT 件(claude)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude | grep -v '/bootstrap/'; }
 
-echo "== 2.5 cowlick / run-agent の設計書フロー（claude 配置） =="
+echo "== 2.5 cowlick / conductor の設計書フロー（claude 配置） =="
 AP=".claude/skills/cowlick/apply-prompt.sh"
-MD=".claude/skills/run-agent/mark-prompt-done.sh"
-QG=".claude/skills/clean-code/quality-gate.sh"
+MD=".claude/skills/conductor/mark-prompt-done.sh"
+QG=".claude/skills/polish/quality-gate.sh"
 mkdir -p draft-prompt
 printf '# 実装順\n\n- [ ] branch-user-api-prompt.md\n- [ ] branch-user-form-prompt.md\n' > draft-prompt/.prompt.md
 echo api > draft-prompt/branch-user-api-prompt.md
@@ -267,9 +267,9 @@ rm -rf .claude/prompt
 echo "== 2.75 DeepSeek research の Bash 3.2 回帰（外部通信なし） =="
 DELEGATE_REPO="$S/delegate-research"
 DELEGATE_BIN="$DELEGATE_REPO/bin"
-DELEGATE_SCRIPT="$DELEGATE_REPO/.claude/skills/run-agent/delegate-deepseek.sh"
+DELEGATE_SCRIPT="$DELEGATE_REPO/.claude/skills/conductor/delegate-deepseek.sh"
 mkdir -p "$DELEGATE_BIN" "$(dirname "$DELEGATE_SCRIPT")"
-cp .claude/skills/run-agent/delegate-deepseek.sh "$DELEGATE_SCRIPT"
+cp .claude/skills/conductor/delegate-deepseek.sh "$DELEGATE_SCRIPT"
 printf '#!/bin/bash\nprintf '\''{"data":{"usage_monthly":0,"usage":0,"limit":40,"limit_reset":"monthly"}}\\n'\''\n' > "$DELEGATE_BIN/curl"
 printf '#!/bin/bash\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/curl" "$DELEGATE_BIN/opencode"
@@ -325,8 +325,8 @@ bash "$S/claude-sim/run-tests.sh" > hook-tests.out 2>&1
 tail -3 hook-tests.out
 grep -q '^PASS=[0-9]* FAIL=0$' hook-tests.out && ok "hook 全数テスト全緑" || { ng "hook 全数テストに失敗あり"; grep '^FAIL' hook-tests.out; }
 
-echo "== 4. rebase-squash E2E =="
-RS="$S/claude-sim/.claude/skills/rebase-squash/rebase-squash.sh"
+echo "== 4. rebase E2E =="
+RS="$S/claude-sim/.claude/skills/rebase/rebase.sh"
 mkdir -p "$S/rs/.claude"
 cp -R "$S/claude-sim/.claude/hooks" "$S/rs/.claude/"
 cd "$S/rs"
@@ -345,7 +345,7 @@ TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
 if bash "$RS" plan.json --base "$BASE" > run.out 2>&1; then ok "squash 実行"; else ng "squash 失敗"; cat run.out; fi
 [ "$(git rev-list --count "$EB..HEAD")" = "2" ] && ok "3→2 コミットへ縮約" || ng "コミット数が不正"
 [ "$(git rev-parse 'HEAD^{tree}')" = "$TREE_BEFORE" ] && ok "tree 同一性" || ng "tree が変わった"
-git branch --list 'backup/rebase-squash-*' | grep -q . && ng "backup ブランチが残っている" || ok "成功時に backup ブランチを残さない"
+git branch --list 'backup/rebase-*' | grep -q . && ng "backup ブランチが残っている" || ok "成功時に backup ブランチを残さない"
 git reflog show HEAD --format=%H | grep -qFx "$C3" && ok "元 HEAD を reflog から辿れる" || ng "元 HEAD が reflog から失われた"
 grep -q "$C3" run.out && ok "報告に元 HEAD の sha を含む" || { ng "元 HEAD の sha を報告していない"; cat run.out; }
 if bash "$RS" plan.json --base "$BASE" > again.out 2>&1; then ng "base 不一致 plan が通ってしまった"; else ok "base 不一致 plan を拒否"; fi
@@ -370,20 +370,20 @@ cp -R "$REPO/e2e" "$S/codex-sim/.codex/e2e"
 cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
 cd "$S/codex-sim"
 git init -q
-if bash .agents/skills/init-agent/init-agent.sh codex > init-codex.log 2>&1; then ok "init-agent codex 実行"; else ng "init-agent codex 実行"; cat init-codex.log; fi
-if [ "$(bash .codex/hooks/shell/commit-message-contract.sh --prefix foo.ts)" = "[codex]: foo.ts/" ] && \
-   bash .codex/hooks/shell/commit-message-contract.sh --validate '[codex]: feature/日本語の説明' && \
-   ! bash .codex/hooks/shell/commit-message-contract.sh --validate '[codex]: feature/english only'; then
+if bash .agents/skills/bootstrap/init-agent.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
+if [ "$(bash .codex/hooks/shell/commit-subject.sh --prefix foo.ts)" = "[codex]: foo.ts/" ] && \
+   bash .codex/hooks/shell/commit-subject.sh --validate '[codex]: feature/日本語の説明' && \
+   ! bash .codex/hooks/shell/commit-subject.sh --validate '[codex]: feature/english only'; then
   ok "commit-message契約をCodex hookが一元生成・検証"
 else
   ng "commit-message契約のCodex hook一元化が不正"
 fi
 grep -q 'HOOK_AGENT="codex"' .codex/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=codex" || ng "hook-io HOOK_AGENT=codex"
 grep -q '"\$TOOL" = "apply_patch"' .codex/hooks/shell/require-test.sh && ok "[NOTE]→apply_patch" || ng "[NOTE]→apply_patch"
-grep -q 'bash .agents/skills/rebase-squash/rebase-squash.sh' .agents/skills/rebase-squash/SKILL.md && ok "[skills_root]→.agents/skills" || ng "[skills_root]→.agents/skills"
-grep -q 'COMMIT_MESSAGE_CONTRACT=.*\.codex/hooks/shell/commit-message-contract.sh' .agents/skills/rebase-squash/rebase-squash.sh && ok "rebase-squash はCodex hook契約を参照" || ng "rebase-squash のCodex hook契約参照が無い"
-LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents 2>/dev/null | grep -v '/init-agent/' | wc -l | tr -d ' ')
-[ "$LEFT" = "0" ] && ok "置換漏れゼロ(codex)" || { ng "置換漏れ $LEFT 件(codex)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents | grep -v '/init-agent/'; }
+grep -q 'bash .agents/skills/rebase/rebase.sh' .agents/skills/rebase/SKILL.md && ok "[skills_root]→.agents/skills" || ng "[skills_root]→.agents/skills"
+grep -q 'COMMIT_MESSAGE_CONTRACT=.*\.codex/hooks/shell/commit-subject.sh' .agents/skills/rebase/rebase.sh && ok "rebase はCodex hook契約を参照" || ng "rebase のCodex hook契約参照が無い"
+LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents 2>/dev/null | grep -v '/bootstrap/' | wc -l | tr -d ' ')
+[ "$LEFT" = "0" ] && ok "置換漏れゼロ(codex)" || { ng "置換漏れ $LEFT 件(codex)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .codex .agents | grep -v '/bootstrap/'; }
 printf 'codex e2e plan\n' > "$S/e2e-plan.md"
 if bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" > apply-e2e.out 2>&1 && grep -q '^codex e2e plan$' .codex/e2e/.e2e.md; then
   ok "e2e plan を固定宛先へ反映"
@@ -392,7 +392,7 @@ else
   cat apply-e2e.out
 fi
 grep -q '^hooks = true$' .codex/config.toml && ok "config: hooks を明示有効化" || ng "config: hooks が未設定"
-[ "$(jq '[.hooks.PreToolUse[] | select(.matcher == "^Bash$") | .hooks[].command | select(contains("normalize-readonly-search.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "codex: 読み取り検索の正規化hookをBashへ配線" || ng "codex: 読み取り検索の正規化hookが未配線"
+[ "$(jq '[.hooks.PreToolUse[] | select(.matcher == "^Bash$") | .hooks[].command | select(contains("readonly-search.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "codex: 読み取り検索の正規化hookをBashへ配線" || ng "codex: 読み取り検索の正規化hookが未配線"
 grep -q '^default_permissions = "distributed"$' .codex/config.toml && ok "config: distributed permission profile を既定化" || ng "config: permission profile が未設定"
 grep -q '^extends = ":workspace"$' .codex/config.toml && ok "permissions: 通常ファイルは workspace write を継承" || ng "permissions: 通常書き込みが未設定"
 grep -q '^enabled = false$' .codex/config.toml && grep -q '^allow_local_binding = false$' .codex/config.toml && ok "permissions: localhost を含む network を遮断" || ng "permissions: network 境界が未設定"
@@ -458,12 +458,12 @@ done
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
 jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
 GROUP_FAILURES=
-for SCRIPT in protect-agent-config.sh protect-lockfiles.sh protect-review-files.sh; do
+for SCRIPT in protect-config.sh protect-locks.sh protect-review.sh; do
   BINDING_COUNT=$(jq --arg script "$SCRIPT" '[.hooks.PreToolUse[] | .hooks[].command | select(contains($script))] | length' .codex/hooks.json)
   [ "$BINDING_COUNT" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] || append_group_failure "$SCRIPT: $BINDING_COUNT bindings"
 done
 report_group "保護hookを apply_patch/Bash の両方へ配線" "$GROUP_FAILURES"
-if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("guard-overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
+if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
   ok "未対応 ask hook を codex へ未配線"
 else
   ng "未対応 ask hook が codex に配線されている"
@@ -513,35 +513,39 @@ if command -v codex >/dev/null 2>&1; then
   report_group "rules: 単一読み取りcommandは未制限" "$GROUP_FAILURES"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- zsh -lc 'echo x > output.txt' 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: opaque shell を prompt" || ng "rules: opaque shell 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/init-agent/init-agent.sh codex 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: init-agent の固定経路を allow" || ng "rules: init-agent 判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/bootstrap/init-agent.sh codex 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: bootstrap の固定経路を allow" || ng "rules: bootstrap 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: e2e plan の固定経路を allow" || ng "rules: e2e plan 判定失敗 out=[$OUT]"
   # 引数なしで呼ぶ apply-prompt.sh が rules に一致するか（引数前提の書き方だと取りこぼす）
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/cowlick/apply-prompt.sh 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 引数なし apply-prompt を allow" || ng "rules: apply-prompt 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/run-agent/mark-prompt-done.sh user-api 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/conductor/mark-prompt-done.sh user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/clean-code/quality-gate.sh record user-api 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/quality-gate.sh record user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: quality-gate の固定経路を allow" || ng "rules: quality-gate 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/run-agent/delegate-deepseek.sh research task-id .codex/prompt/branch-task-prompt.md 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/conductor/delegate-deepseek.sh research task-id .codex/prompt/branch-task-prompt.md 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: delegate-deepseek の固定経路を allow" || ng "rules: delegate-deepseek 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/run-agent/delegate-deepseek.sh smoke 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/conductor/delegate-deepseek.sh smoke 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: 課金smokeだけを prompt" || ng "rules: DeepSeek smoke判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .codex/hooks/shell/protect-review-files.sh approve front/prisma/schema.prisma 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/rebase/rebase.sh --check 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: rebase事前確認をallow" || ng "rules: rebase事前確認判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/rebase/rebase.sh node_modules/.cache/rebase-plan.json 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: rebase plan実行をallow" || ng "rules: rebase plan実行判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .codex/hooks/shell/protect-review.sh approve front/prisma/schema.prisma 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: review対象の変更承認を prompt" || ng "rules: review対象の承認判定失敗 out=[$OUT]"
 else
   echo "skip codex CLI が無いため config / rules 実機検査を省略"
 fi
 
-echo "== 5.5 skill-session marker と発火スコープ（codex） =="
+echo "== 5.5 session marker と発火スコープ（codex） =="
 H=.codex/hooks/shell
-UP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$tdd-run src/foo.ts を回して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
-echo "$UP" | bash $H/skill-session.sh
-[ -f .codex/tmp/skill-session.tdd-run.SESS1 ] && ok "skill-session: \$tdd-run 起動で marker 記録" || ng "skill-session: marker 記録失敗"
-UP2=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS9",cwd:$cwd,prompt:"tdd-run について教えて",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
-echo "$UP2" | bash $H/skill-session.sh
-[ ! -f .codex/tmp/skill-session.tdd-run.SESS9 ] && ok "skill-session: \$ 無しの言及では発火しない" || ng "skill-session: 誤発火"
+UP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$tdd src/foo.ts を回して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
+echo "$UP" | bash $H/session.sh
+[ -f .codex/tmp/session.tdd.SESS1 ] && ok "session: \$tdd 起動で marker 記録" || ng "session: marker 記録失敗"
+UP2=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS9",cwd:$cwd,prompt:"tdd について教えて",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
+echo "$UP2" | bash $H/session.sh
+[ ! -f .codex/tmp/session.tdd.SESS9 ] && ok "session: \$ 無しの言及では発火しない" || ng "session: 誤発火"
 AP=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",turn_id:"t1",transcript_path:"/tmp/x.jsonl",cwd:$cwd,hook_event_name:"PreToolUse",model:"gpt-5.5",permission_mode:"bypassPermissions",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: src/foo.ts\n+x\n*** End Patch\n"},tool_use_id:"call_x"}')
 OUT=$(echo "$AP" | bash $H/require-test.sh)
 [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: marker 一致で執行(実機同形ペイロード)" || ng "require-test: marker 一致 out=[$OUT]"
@@ -553,19 +557,19 @@ APB=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Bash",tool
 [ -z "$(echo "$APB" | bash $H/require-test.sh)" ] && ok "require-test: Bash は棄権" || ng "require-test: Bash"
 AP2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS2",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: src/foo.ts\n+x\n*** End Patch"}}')
 [ -z "$(echo "$AP2" | bash $H/require-test.sh)" ] && ok "require-test: 別セッションの marker では発火しない" || ng "require-test: 残骸で発火"
-rm -f .codex/tmp/skill-session.tdd-run.SESS1
+rm -f .codex/tmp/session.tdd.SESS1
 [ -z "$(echo "$AP" | bash $H/require-test.sh)" ] && ok "require-test: marker 無しは棄権" || ng "require-test: marker 無しで発火"
 UPP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$prototype",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
-echo "$UPP" | bash $H/skill-session.sh
+echo "$UPP" | bash $H/session.sh
 PT=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: a.test.ts\n+x\n*** End Patch"}}')
-[ "$(echo "$PT" | bash $H/prototype-guard.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "prototype-guard: marker 一致でテスト作成を deny" || ng "prototype-guard: 執行されず"
+[ "$(echo "$PT" | bash $H/prototype.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "prototype: marker 一致でテスト作成を deny" || ng "prototype: 執行されず"
 PT2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS2",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: a.test.ts\n+x\n*** End Patch"}}')
-[ -z "$(echo "$PT2" | bash $H/prototype-guard.sh)" ] && ok "prototype-guard: 別セッションは棄権" || ng "prototype-guard: 残骸で発火"
+[ -z "$(echo "$PT2" | bash $H/prototype.sh)" ] && ok "prototype: 別セッションは棄権" || ng "prototype: 残骸で発火"
 SE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"SessionEnd",session_id:"SESS1",cwd:$cwd}')
-echo "$SE" | bash $H/skill-session.sh
-[ ! -f .codex/tmp/skill-session.prototype.SESS1 ] && ok "skill-session: SessionEnd で自セッションの marker を掃除" || ng "skill-session: 掃除漏れ"
+echo "$SE" | bash $H/session.sh
+[ ! -f .codex/tmp/session.prototype.SESS1 ] && ok "session: SessionEnd で自セッションの marker を掃除" || ng "session: 掃除漏れ"
 PG=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .git/config\n+x\n*** End Patch"}}')
-[ "$(echo "$PG" | bash $H/protect-git-dir.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-git-dir: パッチ経由の .git 書き込みを deny" || ng "protect-git-dir: apply_patch 素通し"
+[ "$(echo "$PG" | bash $H/protect-git.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-git: パッチ経由の .git 書き込みを deny" || ng "protect-git: apply_patch 素通し"
 PE=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .env\n+X=1\n*** End Patch"}}')
 [ "$(echo "$PE" | bash $H/protect-env.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-env: パッチ経由の .env 書き込みを deny" || ng "protect-env: apply_patch 素通し"
 PE2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: config/.env.production\n+X=1\n*** End Patch"}}')
@@ -573,25 +577,25 @@ PE2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patc
 PE3=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/env.ts\n+x\n*** End Patch"}}')
 [ -z "$(echo "$PE3" | bash $H/protect-env.sh)" ] && ok "protect-env: env.ts は棄権(誤爆なし)" || ng "protect-env: env.ts 誤爆"
 PL=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: yarn.lock\n+x\n*** End Patch"}}')
-[ "$(echo "$PL" | bash $H/protect-lockfiles.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-lockfiles: Codex apply_patch を deny" || ng "protect-lockfiles: Codex apply_patch 素通し"
+[ "$(echo "$PL" | bash $H/protect-locks.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-locks: Codex apply_patch を deny" || ng "protect-locks: Codex apply_patch 素通し"
 PRF=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: apps/api/infra/main.tf\n+x\n*** End Patch"}}')
-[ "$(echo "$PRF" | bash $H/protect-review-files.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-review-files: 未承認の Terraform を deny" || ng "protect-review-files: 未承認の Terraform が素通し"
-if bash $H/protect-review-files.sh approve apps/api/infra/main.tf >/dev/null 2>&1 && [ -z "$(echo "$PRF" | bash $H/protect-review-files.sh)" ]; then
-  ok "protect-review-files: 承認済みの変更を1回だけ許可"
+[ "$(echo "$PRF" | bash $H/protect-review.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-review: 未承認の Terraform を deny" || ng "protect-review: 未承認の Terraform が素通し"
+if bash $H/protect-review.sh approve apps/api/infra/main.tf >/dev/null 2>&1 && [ -z "$(echo "$PRF" | bash $H/protect-review.sh)" ]; then
+  ok "protect-review: 承認済みの変更を1回だけ許可"
 else
-  ng "protect-review-files: 承認済みの変更を許可できない"
+  ng "protect-review: 承認済みの変更を許可できない"
 fi
-[ "$(echo "$PRF" | bash $H/protect-review-files.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-review-files: 承認を再利用させない" || ng "protect-review-files: 承認tokenが再利用できる"
-if bash $H/protect-review-files.sh approve ../outside/main.tf >/dev/null 2>&1; then ng "protect-review-files: repository外pathを承認"; else ok "protect-review-files: repository外pathを拒否"; fi
+[ "$(echo "$PRF" | bash $H/protect-review.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-review: 承認を再利用させない" || ng "protect-review: 承認tokenが再利用できる"
+if bash $H/protect-review.sh approve ../outside/main.tf >/dev/null 2>&1; then ng "protect-review: repository外pathを承認"; else ok "protect-review: repository外pathを拒否"; fi
 PRF_READ=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"cat apps/api/infra/main.tf"}}')
-[ -z "$(echo "$PRF_READ" | bash $H/protect-review-files.sh)" ] && ok "protect-review-files: 読み取りは許可" || ng "protect-review-files: 読み取りを誤拒否"
+[ -z "$(echo "$PRF_READ" | bash $H/protect-review.sh)" ] && ok "protect-review: 読み取りは許可" || ng "protect-review: 読み取りを誤拒否"
 PAC=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .codex/config.toml\n+x\n*** End Patch"}}')
-[ "$(echo "$PAC" | bash $H/protect-agent-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-agent-config: .codex patch を deny" || ng "protect-agent-config: .codex patch 素通し"
+[ "$(echo "$PAC" | bash $H/protect-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-config: .codex patch を deny" || ng "protect-config: .codex patch 素通し"
 PAC2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .agents/skills/e2e/SKILL.md\n+x\n*** End Patch"}}')
-[ "$(echo "$PAC2" | bash $H/protect-agent-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-agent-config: .agents patch を deny" || ng "protect-agent-config: .agents patch 素通し"
+[ "$(echo "$PAC2" | bash $H/protect-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-config: .agents patch を deny" || ng "protect-config: .agents patch 素通し"
 echo x > codex-untracked.txt
 GO=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Write",tool_input:{file_path:($cwd + "/codex-untracked.txt")}}')
-[ "$(echo "$GO" | bash $H/guard-overwrite.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "hook-io: codex の未対応 ask は deny" || ng "hook-io: codex ask が fail-open"
+[ "$(echo "$GO" | bash $H/overwrite.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "hook-io: codex の未対応 ask は deny" || ng "hook-io: codex ask が fail-open"
 
 echo "== 6. テンプレート残渣チェック =="
 command grep -rn "allowed-tools:.*Shell" "$REPO/skills" >/dev/null 2>&1 && ng "allowed-tools に Shell が残存" || ok "allowed-tools: Shell 残存なし"
@@ -612,7 +616,7 @@ done
 report_group "Claude JSON設定の構文" "$GROUP_FAILURES"
 jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
-jq -e '.permissions.ask | index("Bash(bash .claude/skills/run-agent/delegate-deepseek.sh smoke)")' "$SL" >/dev/null 2>&1 && ok "Claude: 課金smokeだけをask" || ng "Claude: DeepSeek smokeのask漏れ"
+jq -e '.permissions.ask | index("Bash(bash .claude/skills/conductor/delegate-deepseek.sh smoke)")' "$SL" >/dev/null 2>&1 && ok "Claude: 課金smokeだけをask" || ng "Claude: DeepSeek smokeのask漏れ"
 GROUP_FAILURES=
 for READ_PERMISSION in "${CLAUDE_SAFE_READ_PERMISSIONS[@]}"; do
   jq -e --arg permission "$READ_PERMISSION" '.permissions.allow | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$READ_PERMISSION"
@@ -624,7 +628,7 @@ for WRITER_COMMAND in "${FILESYSTEM_WRITER_COMMANDS[@]}"; do
   jq -e --arg permission "$WRITER_PERMISSION" '.permissions.ask | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$WRITER_PERMISSION"
 done
 report_group "Claude: filesystem writerをask" "$GROUP_FAILURES"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 GROUP_FAILURES=
 for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
   PERMISSION="mcp__serena__${MCP_TOOL}"
@@ -639,7 +643,7 @@ done
 report_group "Claude serena: code変更toolを全件deny" "$GROUP_FAILURES"
 jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
-for SC in init-agent/init-agent.sh cowlick/apply-prompt.sh run-agent/mark-prompt-done.sh clean-code/quality-gate.sh run-agent/delegate-deepseek.sh e2e/apply-e2e-plan.sh; do
+for SC in bootstrap/init-agent.sh cowlick/apply-prompt.sh conductor/mark-prompt-done.sh polish/quality-gate.sh conductor/delegate-deepseek.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
   jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }
