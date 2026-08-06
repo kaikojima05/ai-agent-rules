@@ -15,7 +15,7 @@ readonly TASK_ID_PATTERN='^[a-z0-9][a-z0-9-]{0,62}$'
 MODE="${1:-}"
 TASK_ID="${2:-}"
 SPEC_PATH="${3:-}"
-shift "$(( $# >= 3 ? 3 : $# ))"
+NESTING_PATHS=()
 
 fail() {
   printf 'delegate-deepseek: %s\n' "$1" >&2
@@ -38,11 +38,21 @@ validate_repo_path() {
 }
 
 case "$MODE" in
-  research|implement) [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case" ;;
-  smoke)
-    [ -z "$TASK_ID" ] && [ -z "$SPEC_PATH" ] && [ "$#" -eq 0 ] || fail "smoke mode does not accept arguments"
+  research|implement)
+    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
+    [ "$#" -ge 3 ] || fail "$MODE mode requires task id and spec path"
+    shift 3
     ;;
-  *) fail "mode must be research, implement, or smoke" ;;
+  nesting)
+    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
+    [ "$#" -ge 3 ] || fail "nesting mode requires task id and at least one production path"
+    shift 2
+    NESTING_PATHS=("$@")
+    ;;
+  smoke)
+    [ "$#" -eq 1 ] || fail "smoke mode does not accept arguments"
+    ;;
+  *) fail "mode must be research, implement, nesting, or smoke" ;;
 esac
 command -v git >/dev/null 2>&1 || fail "git is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
@@ -53,9 +63,20 @@ command -v opencode >/dev/null 2>&1 || fail "opencode is required"
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not inside a git repository"
 cd "$REPO_ROOT" || fail "cannot enter repository root"
 
-if [ "$MODE" != "smoke" ]; then
+if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
   validate_repo_path "$SPEC_PATH"
   [ -f "$SPEC_PATH" ] || fail "spec file not found: $SPEC_PATH"
+fi
+
+if [ "$MODE" = "nesting" ]; then
+  for path in "${NESTING_PATHS[@]}"; do
+    validate_repo_path "$path"
+    case "$path" in
+      *.test.*|*.spec.*|*/test/*|*/tests/*|*/__tests__/*|*.snap|*fixture*|*mock*|*stub*|*fake*) fail "test assets cannot be inspected for nesting: $path" ;;
+      AGENTS.md|*/AGENTS.md|*.md|package.json|*/package.json|*lock*.json|*.lock|*.toml|*.yaml|*.yml|*.env|*.env.*|*/migrations/*|*.prisma) fail "protected path cannot be inspected for nesting: $path" ;;
+    esac
+    git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 || fail "nesting path must be tracked: $path"
+  done
 fi
 
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/delegate-deepseek.XXXXXX") || fail "cannot create temporary directory"
@@ -101,6 +122,9 @@ jq -ne --argjson limit "$KEY_LIMIT" --argjson hard "$HARD_BUDGET_USD" '$limit <=
 if [ "$MODE" != "smoke" ]; then
   git worktree add --detach "$WORKTREE" HEAD >/dev/null || fail "cannot create isolated worktree"
   WORKTREE_ADDED=1
+fi
+
+if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
   mkdir -p "$WORKTREE/.deepseek-request" || fail "cannot create delegated request directory"
   cp "$REPO_ROOT/$SPEC_PATH" "$WORKTREE/.deepseek-request/spec.md" || fail "cannot copy spec into isolated worktree"
 fi
@@ -194,6 +218,12 @@ elif [ "$MODE" = "research" ]; then
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
+elif [ "$MODE" = "nesting" ]; then
+  NESTING_LIST=$(printf '%s\n' "${NESTING_PATHS[@]}" | sed 's/^/- /')
+  PROMPT="次の本体コードだけを読み取り専用で検査してください。修正案・コード変更は不要です。if/else、loop、switch、try/catch/finally が同じ実行経路で三段階以上重なる候補だけを検出し、各候補を file:line、最大深さ、到達条件、該当する制御構造の順で報告してください。else if は一つの選択、switch の case は switch より深く数えません。候補が無ければ『3段階以上の制御フローネストなし』と明記してください。指定外のファイルは検出対象にしません。対象ファイル:\n$NESTING_LIST"
+  EXECUTION_ROOT="$WORKTREE"
+  OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
+  OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 else
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
   PROMPT="承認済み設計 .deepseek-request/spec.md に従い、次の本体コードだけを実装してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
@@ -223,7 +253,9 @@ if [ "$MODE" = "smoke" ]; then
   exit 0
 fi
 
-rm -rf "$WORKTREE/.deepseek-request"
+if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
+  rm -rf "$WORKTREE/.deepseek-request"
+fi
 
 if [ "$MODE" = "implement" ]; then
   git add -N -- "${ALLOWED_PATHS[@]}" >/dev/null 2>&1 || true

@@ -1,4 +1,4 @@
 interface:
   display_name: "ネスト見直し"
-  short_description: "三段階以上の制御ネストを早期脱出で安全に構造的に減らす"
-  default_prompt: "$nesting-review を使って変更コードの三段階以上のネストを見直してください。"
+  short_description: "DeepSeekが検出した深い制御ネストを安全に見直す"
+  default_prompt: "$nesting-review を使い、DeepSeekの検出結果だけを基に深いネストを見直してください。"
