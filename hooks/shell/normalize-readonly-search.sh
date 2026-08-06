@@ -121,6 +121,40 @@ is_safe_readonly_command() {
   esac
 }
 
+normalize_readonly_executable() {
+  local readonly_command=$1
+  local executable
+  local quoted_command
+  local remainder
+
+  # Codex は argv から組み立てた command の実行file名まで 'rg' のようにquoteする。
+  # 先頭tokenだけquoteを外し、permission層が /bin/zsh -lc ではなく直接実行として
+  # 静的判定できる形へ戻す。引数のquoteは検索patternを保持するため触らない。
+  case "$readonly_command" in
+    \'*)
+      quoted_command=${readonly_command#\'}
+      executable=${quoted_command%%\'*}
+      remainder=${quoted_command#"$executable"}
+      remainder=${remainder#\'}
+      ;;
+    \"*)
+      quoted_command=${readonly_command#\"}
+      executable=${quoted_command%%\"*}
+      remainder=${quoted_command#"$executable"}
+      remainder=${remainder#\"}
+      ;;
+    *)
+      printf '%s\n' "$readonly_command"
+      return 0
+      ;;
+  esac
+
+  case "$remainder" in
+    ""|" "*) printf '%s%s\n' "$executable" "$remainder" ;;
+    *) return 1 ;;
+  esac
+}
+
 normalize_safe_dev_null() {
   local readonly_command=$1
   local base_command
@@ -182,6 +216,13 @@ if has_compound_shell_syntax "$CMD" || invokes_inline_shell "$CMD"; then
   hook_deny "複数コマンドを shell loop・条件分岐・pipeline に集約してはいけません。Read/Grep/Glob または副作用を静的判定できる単一コマンドへ分割してください。複雑な処理はレビュー済み固定スクリプトへ移してください。"
 fi
 
-normalize_safe_dev_null "$CMD"
+has_safe_shell_syntax "$CMD" || exit 0
+NORMALIZED_CMD=$(normalize_readonly_executable "$CMD") || exit 0
+
+normalize_safe_dev_null "$NORMALIZED_CMD"
+
+if is_safe_readonly_command "$NORMALIZED_CMD"; then
+  hook_rewrite_command "$NORMALIZED_CMD"
+fi
 
 exit 0
