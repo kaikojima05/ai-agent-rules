@@ -110,6 +110,7 @@ grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q -- '--arg model_variant "$MODEL_
 grep -q -- '--arg model_id "$MODEL_ID"' "$DS" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$DS" && ok "DeepSeek config: readonly定数をjq引数で受け渡す" || ng "DeepSeek config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
+grep -Fq 'trap cleanup EXIT' "$DS" && grep -Fq "trap 'exit 130' INT" "$DS" && grep -Fq "trap 'exit 143' TERM" "$DS" && ok "DeepSeek中断: cleanup後に処理を継続しない" || ng "DeepSeekのsignal終了処理が不正"
 grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny"' "$DS" && ok "DeepSeek smoke: hello固定・tool全拒否" || ng "DeepSeek smokeのpromptまたは権限が不正"
 grep -q '^  nesting)' "$DS" && grep -q '修正案・コード変更は不要です' "$DS" && grep -q 'nesting path must be tracked' "$DS" && ok "DeepSeek nesting: 本体コードだけを読み取り検出" || ng "DeepSeek nesting検出モードが不正"
 grep -q '^  survey)' "$DS" && grep -q 'survey mode requires task id and instruction' "$DS" && grep -q '調査依頼についてコードベースを読み取り専用で調査' "$DS" && ok "DeepSeek survey: 設計書なしの調査を受け付ける" || ng "DeepSeek survey調査モードが不正"
