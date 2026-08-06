@@ -133,12 +133,14 @@ normalize_readonly_executable() {
   case "$readonly_command" in
     \'*)
       quoted_command=${readonly_command#\'}
+      case "$quoted_command" in *\'*) ;; *) return 1 ;; esac
       executable=${quoted_command%%\'*}
       remainder=${quoted_command#"$executable"}
       remainder=${remainder#\'}
       ;;
     \"*)
       quoted_command=${readonly_command#\"}
+      case "$quoted_command" in *\"*) ;; *) return 1 ;; esac
       executable=${quoted_command%%\"*}
       remainder=${quoted_command#"$executable"}
       remainder=${remainder#\"}
@@ -216,11 +218,11 @@ if has_compound_shell_syntax "$CMD" || invokes_inline_shell "$CMD"; then
   hook_deny "複数コマンドを shell loop・条件分岐・pipeline に集約してはいけません。Read/Grep/Glob または副作用を静的判定できる単一コマンドへ分割してください。複雑な処理はレビュー済み固定スクリプトへ移してください。"
 fi
 
-has_safe_shell_syntax "$CMD" || exit 0
 NORMALIZED_CMD=$(normalize_readonly_executable "$CMD") || exit 0
 
 normalize_safe_dev_null "$NORMALIZED_CMD"
 
+has_safe_shell_syntax "$CMD" || exit 0
 if is_safe_readonly_command "$NORMALIZED_CMD"; then
   hook_rewrite_command "$NORMALIZED_CMD"
 fi
