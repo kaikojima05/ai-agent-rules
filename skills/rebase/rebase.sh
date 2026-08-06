@@ -43,7 +43,6 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 COMMIT_MESSAGE_CONTRACT="$REPO_ROOT/.[agent_name]/hooks/shell/commit-subject.sh"
 [ -r "$COMMIT_MESSAGE_CONTRACT" ] || die "コミットsubject契約が無い: $COMMIT_MESSAGE_CONTRACT"
 . "$COMMIT_MESSAGE_CONTRACT"
-AGENT_TAG="$COMMIT_MESSAGE_AGENT"
 
 # clean tree 前提（untracked は無害なので許容）
 git status --porcelain | grep -qv '^??' && \
@@ -68,13 +67,10 @@ INVISIBLE=$(git rev-list --count "$BASE..$ORIG" --not --remotes)
 [ "$TOTAL" -eq "$INVISIBLE" ] || \
   die "範囲内にリモートへ push 済みのコミットが $((TOTAL - INVISIBLE)) 件ある。共有履歴は書き換えない"
 
-# 契約タグ以外のコミットは境界: 最新の非タグコミットより古い側は対象から外す
+# 契約外のコミットは境界: 最新の契約外コミットより古い側は対象から外す
 EFFECTIVE_BASE=$BASE
 while IFS=$'\t' read -r sha subject; do
-  case "$subject" in
-    "[${AGENT_TAG}]: "*) ;;
-    *) EFFECTIVE_BASE=$sha ;;
-  esac
+  commit_message_subject_is_valid "$subject" || EFFECTIVE_BASE=$sha
 done < <(git log --reverse --format='%H%x09%s' "$BASE..$ORIG")
 
 COUNT=$(git rev-list --count "$EFFECTIVE_BASE..$ORIG")
