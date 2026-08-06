@@ -1,5 +1,5 @@
 #!/bin/bash
-# OpenCode + OpenRouter + DeepSeek を、読み取り専用調査または隔離実装として実行する。
+# OpenCode + OpenRouter + DeepSeek を、読み取り専用調査または隔離実装として共通実行する。
 set -u
 
 readonly SOFT_BUDGET_USD="38"
@@ -19,7 +19,7 @@ DIRECT_INSTRUCTION="${3:-}"
 NESTING_PATHS=()
 
 fail() {
-  printf 'delegate-deepseek: %s\n' "$1" >&2
+  printf 'deepseek: %s\n' "$1" >&2
   exit 1
 }
 
@@ -109,7 +109,9 @@ cleanup() {
   fi
   rm -rf "$TEMP_ROOT"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 if [ "$MODE" != "smoke" ]; then
   RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"

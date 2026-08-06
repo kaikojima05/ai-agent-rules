@@ -1,14 +1,13 @@
 #!/bin/bash
 # PreToolUse(Read|Grep|Glob|Bash) hook: コードベース調査を隔離したDeepSeekへ固定する。
 # 上位モデルは設定・skill・DeepSeek結果だけを読める。実装・設定・テストの探索は
-# delegate-deepseek.sh survey 経由だけにし、Read系toolと直接検索の迂回を拒否する。
+# deepseek/delegate.sh survey 経由だけにし、Read系toolと直接検索の迂回を拒否する。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 
 TOOL=$(hook_tool_name)
 ROOT=$(hook_cwd)
-RESULT_PATH=".$HOOK_AGENT/tmp/deepseek/"
-DENY_MESSAGE="コードベースの調査は DeepSeek に固定されています。上位モデルの Read / Grep / Glob / 直接検索は使わず、bash [skills_root]/conductor/delegate-deepseek.sh survey <task-id> <調査指示> を実行し、返却された結果だけを読んでください。"
+DENY_MESSAGE="コードベースの調査は DeepSeek に固定されています。上位モデルの Read / Grep / Glob / 直接検索は使わず、bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示> を実行し、返却された結果だけを読んでください。"
 
 allowed_read_path() {
   path=$1
@@ -44,7 +43,7 @@ CMD=$(hook_command)
 
 # 固定委任実行器そのものは検索ではない。内部の隔離worktreeでだけ読取を許可する。
 case "$CMD" in
-  "bash .claude/skills/conductor/delegate-deepseek.sh "*|"bash .agents/skills/conductor/delegate-deepseek.sh "*) exit 0 ;;
+  "bash .claude/skills/deepseek/delegate.sh "*|"bash .agents/skills/deepseek/delegate.sh "*) exit 0 ;;
 esac
 
 # 上位モデルの単独検索・一覧・差分読取を拒否する。複合shellはreadonly-search.shが別途拒否する。
