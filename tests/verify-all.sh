@@ -35,6 +35,14 @@ CLAUDE_UNAVAILABLE_SERENA_TOOLS=(
   search_for_pattern
 )
 CODEX_CONTEXT_EXTRA_APPROVED_SERENA_TOOLS=(search_for_pattern)
+FILESYSTEM_WRITER_COMMANDS=(cp install rsync touch mkdir chmod chown chgrp ln patch)
+CLAUDE_SAFE_READ_PERMISSIONS=(
+  'Bash(find:*)'
+  'Bash(nl:*)'
+  'Bash(sort:*)'
+  'Bash(git ls-files:*)'
+  'Bash(git grep:*)'
+)
 LEGACY_PRODUCT_NAME="claude"
 LEGACY_HOOK_NAME="enforce-${LEGACY_PRODUCT_NAME}-commit"
 LEGACY_TEST_LABEL="${LEGACY_PRODUCT_NAME}-commit:"
@@ -416,6 +424,12 @@ if command -v codex >/dev/null 2>&1; then
   fi
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- rm -rf tmp/example 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: rm を prompt" || ng "rules: rm 判定失敗 out=[$OUT]"
+  GROUP_FAILURES=
+  for WRITER_COMMAND in "${FILESYSTEM_WRITER_COMMANDS[@]}"; do
+    OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- "$WRITER_COMMAND" target 2>/dev/null)
+    [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] || append_group_failure "$WRITER_COMMAND: $OUT"
+  done
+  report_group "rules: filesystem writerをprompt" "$GROUP_FAILURES"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git push origin main 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "forbidden" ] && ok "rules: git push を forbidden" || ng "rules: push 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git add src/example.ts 2>/dev/null)
@@ -424,6 +438,12 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: git commit を allow" || ng "rules: git commit 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git status --short 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: git status は未制限" || ng "rules: git status 誤検出 out=[$OUT]"
+  GROUP_FAILURES=
+  for READ_COMMAND in cat find nl sort rg; do
+    OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- "$READ_COMMAND" target 2>/dev/null)
+    [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] || append_group_failure "$READ_COMMAND: $OUT"
+  done
+  report_group "rules: 単一読み取りcommandは未制限" "$GROUP_FAILURES"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- zsh -lc 'echo x > output.txt' 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: opaque shell を prompt" || ng "rules: opaque shell 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/init-agent/init-agent.sh codex 2>/dev/null)
@@ -515,6 +535,17 @@ report_group "Claude JSON設定の構文" "$GROUP_FAILURES"
 jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
 jq -e '.permissions.ask | index("Bash(bash .claude/skills/run-agent/delegate-deepseek.sh smoke)")' "$SL" >/dev/null 2>&1 && ok "Claude: 課金smokeだけをask" || ng "Claude: DeepSeek smokeのask漏れ"
+GROUP_FAILURES=
+for READ_PERMISSION in "${CLAUDE_SAFE_READ_PERMISSIONS[@]}"; do
+  jq -e --arg permission "$READ_PERMISSION" '.permissions.allow | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$READ_PERMISSION"
+done
+report_group "Claude: 単一読み取りcommandをallow" "$GROUP_FAILURES"
+GROUP_FAILURES=
+for WRITER_COMMAND in "${FILESYSTEM_WRITER_COMMANDS[@]}"; do
+  WRITER_PERMISSION="Bash($WRITER_COMMAND:*)"
+  jq -e --arg permission "$WRITER_PERMISSION" '.permissions.ask | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$WRITER_PERMISSION"
+done
+report_group "Claude: filesystem writerをask" "$GROUP_FAILURES"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-lockfiles.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 GROUP_FAILURES=
 for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
