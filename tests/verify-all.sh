@@ -309,6 +309,7 @@ cp -R "$REPO/prompt" "$S/codex-sim/.codex/prompt"
 cp -R "$REPO/e2e" "$S/codex-sim/.codex/e2e"
 cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
 cd "$S/codex-sim"
+git init -q
 if bash .agents/skills/init-agent/init-agent.sh codex > init-codex.log 2>&1; then ok "init-agent codex 実行"; else ng "init-agent codex 実行"; cat init-codex.log; fi
 grep -q '`\[codex\]: {対象ファイル名}/{変更内容}`' AGENTS.md && ok "AGENTS.md → [codex]:" || ng "AGENTS.md → [codex]:"
 grep -q 'HOOK_AGENT="codex"' .codex/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=codex" || ng "hook-io HOOK_AGENT=codex"
