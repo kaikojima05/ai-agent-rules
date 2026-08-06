@@ -101,7 +101,7 @@ for f in "$REPO"/hooks/shell/*.sh; do
   case "$f" in */hook-io.sh) continue ;; esac
   [ -x "$f" ] || append_group_failure "exec bit: $f"
 done
-DS="$REPO/skills/conductor/delegate-deepseek.sh"
+DS="$REPO/skills/deepseek/delegate.sh"
 [ -x "$DS" ] || append_group_failure "exec bit: $DS"
 report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 grep -q 'SOFT_BUDGET_USD="38"' "$DS" && grep -q 'HARD_BUDGET_USD="40"' "$DS" && ok "DeepSeek予算: soft=38 hard=40" || ng "DeepSeek予算が不正"
@@ -112,6 +112,8 @@ grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "De
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
 grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny"' "$DS" && ok "DeepSeek smoke: hello固定・tool全拒否" || ng "DeepSeek smokeのpromptまたは権限が不正"
 grep -q '^  nesting)' "$DS" && grep -q '修正案・コード変更は不要です' "$DS" && grep -q 'nesting path must be tracked' "$DS" && ok "DeepSeek nesting: 本体コードだけを読み取り検出" || ng "DeepSeek nesting検出モードが不正"
+grep -q '^  survey)' "$DS" && grep -q 'survey mode requires task id and instruction' "$DS" && grep -q '調査依頼についてコードベースを読み取り専用で調査' "$DS" && ok "DeepSeek survey: 設計書なしの調査を受け付ける" || ng "DeepSeek survey調査モードが不正"
+grep -q '^  errand)' "$DS" && grep -q 'errand mode requires task id, instruction, --, and production paths' "$DS" && grep -q '短い実装指示に従い' "$DS" && ok "DeepSeek errand: 設計書なしの限定実装を受け付ける" || ng "DeepSeek errand実装モードが不正"
 
 BOOTSTRAP_SKILL="$REPO/skills/bootstrap/SKILL.md"
 if grep -q '^allowed-tools: Bash$' "$BOOTSTRAP_SKILL" && grep -q '最初のツール呼び出しで Step 3' "$BOOTSTRAP_SKILL"; then
@@ -163,6 +165,23 @@ for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
 done
 report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 
+echo "== 軽微な実装委任と全体調査委任 =="
+ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
+[ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
+grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail は呼ばない' "$ERRAND_SKILL" && grep -Fq '既存の実装挙動を調査する必要がある場合は' "$ERRAND_SKILL" && ok "errand は軽微な明示委任に限定" || ng "errand の起動境界が不正"
+grep -Fq 'errand <task-id> <短い実装指示> -- <許可する本体コード>' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はDeepSeekの実装境界を固定" || ng "errand の実装境界が不正"
+DELEGATE_HOOK="$REPO/hooks/shell/delegate.sh"
+[ -x "$DELEGATE_HOOK" ] && grep -q 'Read|Grep|Glob' "$DELEGATE_HOOK" && grep -q 'deepseek/delegate.sh survey' "$DELEGATE_HOOK" && grep -q '直接検索' "$DELEGATE_HOOK" && ok "コードベース調査をDeepSeekへ強制" || ng "コードベース調査の強制hookが無い"
+jq -e '[.hooks.PreToolUse[] | select(.matcher == "^(Read|Grep|Glob)$") | .hooks[].command | contains("delegate.sh")] | any' "$REPO/codex/hooks.json" >/dev/null && jq -e '[.hooks.PreToolUse[] | select(.matcher == "Read|Grep|Glob") | .hooks[].command | contains("delegate.sh")] | any' "$REPO/claude/settings.json" >/dev/null && ok "CodexとClaudeのRead系toolを調査委任hookへ配線" || ng "Read系toolの調査委任hook配線が無い"
+GROUP_FAILURES=
+for REMOVED_SKILL in audit interview; do
+  [ ! -d "$REPO/skills/$REMOVED_SKILL" ] || append_group_failure "旧directory: skills/$REMOVED_SKILL"
+  if command grep -rn "\b$REMOVED_SKILL\b" "$REPO/README.md" "$REPO/AGENTS.md" "$REPO/skills" "$REPO/codex" "$REPO/claude" >/dev/null 2>&1; then
+    append_group_failure "旧reference: $REMOVED_SKILL"
+  fi
+done
+report_group "未使用skill audit・interviewのdirectory・参照なし" "$GROUP_FAILURES"
+
 echo "== conductor の最終品質ゲート =="
 POLISH_SKILL="$REPO/skills/polish/SKILL.md"
 UNWIND_SKILL="$REPO/skills/unwind/SKILL.md"
@@ -172,7 +191,7 @@ MARK_PROMPT_DONE_SCRIPT="$REPO/skills/conductor/mark-prompt-done.sh"
 [ -f "$UNWIND_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/unwind" >/dev/null && ok "unwind スキルが有効" || ng "unwind スキルが無効"
 grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
-grep -Fq 'delegate-deepseek.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && ok "unwind は検出をDeepSeekへ専任" || ng "unwind の検出責務分離が無い"
+grep -Fq 'deepseek/delegate.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && ok "unwind は検出をDeepSeekへ専任" || ng "unwind の検出責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$POLISH_SKILL" && ok "polish の品質receipt記録器が有効" || ng "polish の品質receipt記録器が無い"
 grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$CONDUCTOR_SKILL" && ok "conductor の完了更新は品質receiptを検証" || ng "conductor の品質receipt検証が無い"
 if grep -Fq 'Skill(polish)' "$CONDUCTOR_SKILL" && \
@@ -199,9 +218,9 @@ if bash .claude/skills/bootstrap/init-agent.sh claude > init-claude.log 2>&1; th
 bash -n .claude/hooks/shell/require-test.sh 2>/dev/null && ok "解決後 require-test 構文" || ng "解決後 require-test 構文"
 grep -q 'HOOK_AGENT="claude"' .claude/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=claude" || ng "hook-io HOOK_AGENT=claude"
 if ! grep -q '\[\[agent_name\]\]' AGENTS.md && \
-   [ "$(bash .claude/hooks/shell/commit-subject.sh --prefix foo.ts)" = "[claude]: foo.ts/" ] && \
-   bash .claude/hooks/shell/commit-subject.sh --validate '[claude]: feature/日本語の説明' && \
-   ! bash .claude/hooks/shell/commit-subject.sh --validate '[claude]: feature/english only' && \
+   [ "$(bash .claude/hooks/shell/commit-subject.sh --prefix foo.ts)" = "foo.ts: " ] && \
+   bash .claude/hooks/shell/commit-subject.sh --validate 'feature: 日本語の説明' && \
+   ! bash .claude/hooks/shell/commit-subject.sh --validate 'feature: english only' && \
    grep -q 'COMMIT_MESSAGE_CONTRACT=.*\.claude/hooks/shell/commit-subject.sh' .claude/skills/rebase/rebase.sh; then
   ok "commit-message契約をhookが一元生成・検証"
 else
@@ -267,9 +286,9 @@ rm -rf .claude/prompt
 echo "== 2.75 DeepSeek research の Bash 3.2 回帰（外部通信なし） =="
 DELEGATE_REPO="$S/delegate-research"
 DELEGATE_BIN="$DELEGATE_REPO/bin"
-DELEGATE_SCRIPT="$DELEGATE_REPO/.claude/skills/conductor/delegate-deepseek.sh"
+DELEGATE_SCRIPT="$DELEGATE_REPO/.claude/skills/deepseek/delegate.sh"
 mkdir -p "$DELEGATE_BIN" "$(dirname "$DELEGATE_SCRIPT")"
-cp .claude/skills/conductor/delegate-deepseek.sh "$DELEGATE_SCRIPT"
+cp .claude/skills/deepseek/delegate.sh "$DELEGATE_SCRIPT"
 printf '#!/bin/bash\nprintf '\''{"data":{"usage_monthly":0,"usage":0,"limit":40,"limit_reset":"monthly"}}\\n'\''\n' > "$DELEGATE_BIN/curl"
 printf '#!/bin/bash\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/curl" "$DELEGATE_BIN/opencode"
@@ -291,6 +310,17 @@ if [ -f "$EMPTY_RESULT" ] && [ "$(jq -c '.changed_paths' "$EMPTY_RESULT")" = "[]
 else
   ng "delegate-deepseek: 変更ゼロのresult.jsonが不正"
 fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey empty-survey 'src配下の定数を調査する' > delegate-survey.out 2>&1; then
+  ok "delegate-deepseek: surveyは設計書なしの読み取り調査を完了"
+else
+  ng "delegate-deepseek: surveyが失敗"; cat delegate-survey.out
+fi
+SURVEY_RESULT="$DELEGATE_REPO/.claude/tmp/deepseek/empty-survey/result.json"
+if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/empty-survey/spec.md" ]; then
+  ok "delegate-deepseek: surveyは調査指示を永続化しない"
+else
+  ng "delegate-deepseek: surveyの一時指示またはresult.jsonが不正"
+fi
 mkdir -p src
 printf 'export const subject = true\n' > src/subject.ts
 git add src/subject.ts
@@ -305,6 +335,17 @@ if [ -f "$NESTING_RESULT" ] && [ "$(jq -r '.mode' "$NESTING_RESULT")" = "nesting
   ok "delegate-deepseek: nesting結果を変更なしで保存"
 else
   ng "delegate-deepseek: nestingのresult.jsonが不正"
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand errand-check 'subject.tsのboolean定数をfalseに変更する' -- src/subject.ts > delegate-errand.out 2>&1; then
+  ok "delegate-deepseek: errandは一時設計書なしで限定実装を完了"
+else
+  ng "delegate-deepseek: errandが失敗"; cat delegate-errand.out
+fi
+ERRAND_RESULT="$DELEGATE_REPO/.claude/tmp/deepseek/errand-check/result.json"
+if [ -f "$ERRAND_RESULT" ] && [ "$(jq -r '.mode' "$ERRAND_RESULT")" = "errand" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/errand-check/spec.md" ]; then
+  ok "delegate-deepseek: errandは実装指示を永続化しない"
+else
+  ng "delegate-deepseek: errandの一時指示またはresult.jsonが不正"
 fi
 printf '#!/bin/bash\ntouch protected-change.txt\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
@@ -332,15 +373,15 @@ cp -R "$S/claude-sim/.claude/hooks" "$S/rs/.claude/"
 cd "$S/rs"
 git init -q && git config user.email tester@example.com && git config user.name tester
 echo base > base.txt && git add base.txt && git commit -qm "chore: base"
-echo 1 > f1.ts && git add f1.ts && git commit -qm "[claude]: f1.ts/f1を追加した"
-echo 2 > f1.test.ts && git add f1.test.ts && git commit -qm "[claude]: f1.test.ts/f1のテストを追加した"
-echo 3 > f2.ts && git add f2.ts && git commit -qm "[claude]: f2.ts/f2を追加した"
+echo 1 > f1.ts && git add f1.ts && git commit -qm "f1.ts: f1を追加した"
+echo 2 > f1.test.ts && git add f1.test.ts && git commit -qm "f1.test.ts: f1のテストを追加した"
+echo 3 > f2.ts && git add f2.ts && git commit -qm "f2.ts: f2を追加した"
 BASE=$(git rev-parse HEAD~3)
 if bash "$RS" --check --base "$BASE" > check.out 2>&1; then ok "--check 成功"; else ng "--check 失敗"; cat check.out; fi
 grep -q "COMMITS 3" check.out && ok "対象3件を認識" || ng "対象件数が不正"
 EB=$(grep '^BASE ' check.out | cut -d' ' -f2)
 C1=$(git rev-parse HEAD~2); C2=$(git rev-parse HEAD~1); C3=$(git rev-parse HEAD)
-printf '{"base":"%s","groups":[{"subject":"[claude]: f1/f1と対応テストを追加した","commits":["%s","%s"]},{"subject":"[claude]: f2.ts/f2を追加した","commits":["%s"]}]}\n' "$EB" "$C1" "$C2" "$C3" > plan.json
+printf '{"base":"%s","groups":[{"subject":"f1: f1と対応テストを追加した","commits":["%s","%s"]},{"subject":"f2.ts: f2を追加した","commits":["%s"]}]}\n' "$EB" "$C1" "$C2" "$C3" > plan.json
 TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
 if bash "$RS" plan.json --base "$BASE" > run.out 2>&1; then ok "squash 実行"; else ng "squash 失敗"; cat run.out; fi
 [ "$(git rev-list --count "$EB..HEAD")" = "2" ] && ok "3→2 コミットへ縮約" || ng "コミット数が不正"
@@ -351,8 +392,8 @@ grep -q "$C3" run.out && ok "報告に元 HEAD の sha を含む" || { ng "元 H
 if bash "$RS" plan.json --base "$BASE" > again.out 2>&1; then ng "base 不一致 plan が通ってしまった"; else ok "base 不一致 plan を拒否"; fi
 printf '{"base":"%s","groups":[{"subject":"タグ無し不正subject","commits":["%s"]}]}\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD)" > bad.json
 if bash "$RS" bad.json --base "$(git rev-parse 'HEAD~1')" > bad.out 2>&1; then ng "不正 subject が通ってしまった"; else ok "不正 subject を拒否"; fi
-echo 4 > f3.ts && git add f3.ts && git commit -qm "manual: 手動変更"
-echo 5 > f4.ts && git add f4.ts && git commit -qm "[claude]: f4.ts/f4を追加した"
+echo 4 > f3.ts && git add f3.ts && git commit -qm "manual change"
+echo 5 > f4.ts && git add f4.ts && git commit -qm "f4.ts: f4を追加した"
 bash "$RS" --check --base "$BASE" > b2.out 2>&1
 grep -q "COMMITS 1" b2.out && ok "非タグコミットを境界として認識" || { ng "境界判定が不正"; cat b2.out; }
 
@@ -371,9 +412,9 @@ cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
 cd "$S/codex-sim"
 git init -q
 if bash .agents/skills/bootstrap/init-agent.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
-if [ "$(bash .codex/hooks/shell/commit-subject.sh --prefix foo.ts)" = "[codex]: foo.ts/" ] && \
-   bash .codex/hooks/shell/commit-subject.sh --validate '[codex]: feature/日本語の説明' && \
-   ! bash .codex/hooks/shell/commit-subject.sh --validate '[codex]: feature/english only'; then
+if [ "$(bash .codex/hooks/shell/commit-subject.sh --prefix foo.ts)" = "foo.ts: " ] && \
+   bash .codex/hooks/shell/commit-subject.sh --validate 'feature: 日本語の説明' && \
+   ! bash .codex/hooks/shell/commit-subject.sh --validate 'feature: english only'; then
   ok "commit-message契約をCodex hookが一元生成・検証"
 else
   ng "commit-message契約のCodex hook一元化が不正"
@@ -524,9 +565,9 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/quality-gate.sh record user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: quality-gate の固定経路を allow" || ng "rules: quality-gate 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/conductor/delegate-deepseek.sh research task-id .codex/prompt/branch-task-prompt.md 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/deepseek/delegate.sh research task-id .codex/prompt/branch-task-prompt.md 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: delegate-deepseek の固定経路を allow" || ng "rules: delegate-deepseek 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/conductor/delegate-deepseek.sh smoke 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/deepseek/delegate.sh smoke 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: 課金smokeだけを prompt" || ng "rules: DeepSeek smoke判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/rebase/rebase.sh --check 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: rebase事前確認をallow" || ng "rules: rebase事前確認判定失敗 out=[$OUT]"
@@ -540,6 +581,16 @@ fi
 
 echo "== 5.5 session marker と発火スコープ（codex） =="
 H=.codex/hooks/shell
+DIRECT_READ=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Read",tool_input:{file_path:($cwd + "/src/foo.ts")}}')
+OUT=$(echo "$DIRECT_READ" | bash $H/delegate.sh)
+[ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "delegate: Codex Readによる直接コード調査をdeny" || ng "delegate: Codex Readが素通し out=[$OUT]"
+DELEGATED_RESULT=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Read",tool_input:{file_path:($cwd + "/.codex/tmp/deepseek/task/result.json")}}')
+[ -z "$(echo "$DELEGATED_RESULT" | bash $H/delegate.sh)" ] && ok "delegate: DeepSeek結果のReadを許可" || ng "delegate: DeepSeek結果Readを誤拒否"
+DIRECT_SEARCH=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"rg subject src"}}')
+OUT=$(echo "$DIRECT_SEARCH" | bash $H/delegate.sh)
+[ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "delegate: Bash検索による直接コード調査をdeny" || ng "delegate: Bash検索が素通し out=[$OUT]"
+FIXED_DELEGATE=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"bash .agents/skills/deepseek/delegate.sh survey task-id 調査"}}')
+[ -z "$(echo "$FIXED_DELEGATE" | bash $H/delegate.sh)" ] && ok "delegate: 固定DeepSeek実行器を許可" || ng "delegate: 固定DeepSeek実行器を誤拒否"
 UP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$tdd src/foo.ts を回して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UP" | bash $H/session.sh
 [ -f .codex/tmp/session.tdd.SESS1 ] && ok "session: \$tdd 起動で marker 記録" || ng "session: marker 記録失敗"
@@ -616,7 +667,7 @@ done
 report_group "Claude JSON設定の構文" "$GROUP_FAILURES"
 jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
-jq -e '.permissions.ask | index("Bash(bash .claude/skills/conductor/delegate-deepseek.sh smoke)")' "$SL" >/dev/null 2>&1 && ok "Claude: 課金smokeだけをask" || ng "Claude: DeepSeek smokeのask漏れ"
+jq -e '.permissions.ask | index("Bash(bash .claude/skills/deepseek/delegate.sh smoke)")' "$SL" >/dev/null 2>&1 && ok "Claude: 課金smokeだけをask" || ng "Claude: DeepSeek smokeのask漏れ"
 GROUP_FAILURES=
 for READ_PERMISSION in "${CLAUDE_SAFE_READ_PERMISSIONS[@]}"; do
   jq -e --arg permission "$READ_PERMISSION" '.permissions.allow | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$READ_PERMISSION"
@@ -643,7 +694,7 @@ done
 report_group "Claude serena: code変更toolを全件deny" "$GROUP_FAILURES"
 jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
-for SC in bootstrap/init-agent.sh cowlick/apply-prompt.sh conductor/mark-prompt-done.sh polish/quality-gate.sh conductor/delegate-deepseek.sh e2e/apply-e2e-plan.sh; do
+for SC in bootstrap/init-agent.sh cowlick/apply-prompt.sh conductor/mark-prompt-done.sh polish/quality-gate.sh deepseek/delegate.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
   jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }
