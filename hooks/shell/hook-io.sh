@@ -71,10 +71,10 @@ hook_file_paths() {
         echo "$HOOK_INPUT" | jq -r '.tool_input.command // empty' | \
           sed -nE -e 's/^\*\*\* (Add|Update|Delete) File: //p' -e 's/^\*\*\* Move to: //p'
       else
-        echo "$HOOK_INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty'
+        echo "$HOOK_INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // .tool_input.path // empty'
       fi ;;
     *)
-      echo "$HOOK_INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' ;;
+      echo "$HOOK_INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // .tool_input.path // empty' ;;
   esac
 }
 
