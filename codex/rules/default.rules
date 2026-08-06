@@ -44,6 +44,17 @@ prefix_rule(
     decision = "prompt",
     justification = "未push履歴の変更計画とbackup作成条件を確認します。",
 )
+prefix_rule(
+    pattern = ["bash", ".codex/hooks/shell/protect-review-files.sh", "approve"],
+    decision = "prompt",
+    justification = "レビュー対象ファイルへの次の1回の変更を許可するか確認します。",
+    match = [
+        "bash .codex/hooks/shell/protect-review-files.sh approve front/prisma/schema.prisma",
+    ],
+    not_match = [
+        "bash .codex/hooks/shell/protect-review-files.sh front/prisma/schema.prisma",
+    ],
+)
 
 # 自動コミットは共有 hook が index とメッセージを検証することを前提に許可する。
 prefix_rule(
