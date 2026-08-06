@@ -21,10 +21,7 @@
 1. Git が追跡するファイルを編集したら、そのファイルだけを即コミットすること
   - `git add <対象ファイル>` → `git commit`。`git add -A` / `git add .` は禁止
   - `.gitignore` 等で無視されるファイルはこの契約の対象外である。`git add -f` / `git add --force` で規則を迂回してはならない。作業ツリー上で必要な検証を行って後続工程へ進み、完了報告で未コミットである理由を示すこと
-2. コミットメッセージは「`[[agent_name]]: {対象ファイル名}/{変更内容}`」の形式で、変更内容は日本語で書くこと
-  - ファイル名は basename を基本とし、同名ファイルが複数ある場合は `tdd-run/SKILL.md` のように親ディレクトリを付ける
-3. コミットは常にユーザー本人のアカウント（git config の identity）で作成すること
-  - `--author` 指定や `Co-Authored-By:` 等で AI をコミットへ混ぜることは禁止
+2. コミットsubject・identity・AI署名の契約は、`hooks/shell/commit-message-contract.sh` と `hooks/shell/enforce-agent-commit.sh` の生成・検証に従うこと
 
 ## 説明責任
 1. コードの追加・変更時は必ず意図をユーザーに説明する（テストコードは除く）
