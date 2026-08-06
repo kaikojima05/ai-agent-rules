@@ -283,7 +283,9 @@ grep -q '^PASS=[0-9]* FAIL=0$' hook-tests.out && ok "hook 全数テスト全緑"
 
 echo "== 4. rebase-squash E2E =="
 RS="$S/claude-sim/.claude/skills/rebase-squash/rebase-squash.sh"
-mkdir "$S/rs" && cd "$S/rs"
+mkdir -p "$S/rs/.claude"
+cp -R "$S/claude-sim/.claude/hooks" "$S/rs/.claude/"
+cd "$S/rs"
 git init -q && git config user.email tester@example.com && git config user.name tester
 echo base > base.txt && git add base.txt && git commit -qm "chore: base"
 echo 1 > f1.ts && git add f1.ts && git commit -qm "[claude]: f1.ts/f1を追加した"
