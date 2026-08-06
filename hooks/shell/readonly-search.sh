@@ -164,7 +164,9 @@ normalize_safe_dev_null() {
   local redirect_suffix
 
   # /dev/null以外のredirectはpermission層へ委ねる。末尾の単一redirectだけを扱い、
-  # 2>&1や複数redirectの新しい組み合わせを例外として増やさない。
+  # 2>&1や複数redirectの新しい組み合わせを例外として増やさない。Codexのpermission層は
+  # redirectが残るとshell wrapperへ包み直すため、安全な読み取りcommandのstderr破棄は
+  # optionへ置換できる場合を除いて削る。診断表示は増えるが、終了statusと読み取り結果は変えない。
   case "$readonly_command" in
     *" 2>/dev/null")
       base_command=${readonly_command%" 2>/dev/null"}
@@ -204,9 +206,9 @@ normalize_safe_dev_null() {
           *" --no-messages "*) ;;
           *) normalized_command="rg --no-messages${base_command#rg}" ;;
         esac
-        redirect_suffix=
         ;;
     esac
+    redirect_suffix=
   fi
 
   hook_rewrite_command "$normalized_command$redirect_suffix"

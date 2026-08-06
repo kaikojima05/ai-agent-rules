@@ -170,7 +170,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 - Codex のpermission profile / network / MCP承認 / hook有効化 → `codex/config.toml`
 - Codex のコマンド単位の許可 / 確認 / 禁止 → `codex/rules/default.rules`
 - Codex のhookイベントと実行timeout → `codex/hooks.json`
-- 単一読み取りcommand、`/dev/null`例外、複合shell・危険optionの拒否 → `hooks/shell/readonly-search.sh`
+- 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 → `hooks/shell/readonly-search.sh`
 - テストの有無でコード書き込みを判定（`tdd` 稼働中のみ deny） → `hooks/shell/require-test.sh`（claude: tdd の frontmatter hooks で起動 / codex: 常時配線 + `session.sh` の marker で tdd 稼働中のみ執行）
 - 復元できない全上書きだけ確認に通す（Claude Code） → `hooks/shell/overwrite.sh`
 - `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-config.sh`

@@ -96,7 +96,7 @@ check_bash_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
   readonly-search.sh \
   "rg -n 'foo|bar' front --glob '!generated/**' 2>/dev/null"
 check_bash_rewrite "readonly-search: findのstderr破棄を許可" \
-  "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null" \
+  "find .codex/tmp/deepseek -maxdepth 2 -type f -print" \
   readonly-search.sh \
   "find .codex/tmp/deepseek -maxdepth 2 -type f -print 2>/dev/null"
 check_bash_rewrite "readonly-search: stdoutのdev null破棄を許可" \
