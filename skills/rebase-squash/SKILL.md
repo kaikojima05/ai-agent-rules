@@ -1,13 +1,13 @@
 ---
 name: rebase-squash
-description: "1 ファイル = 1 コミットで積んだ [[agent_name]]: 履歴を、未 push 範囲だけ機能単位に squash する。分類は LLM・履歴操作は決定的スクリプト（temp worktree リプレイ → 二重検証 → swap）。正常系の承認ゲートはグルーピング承認の 1 つだけ"
+description: "1 ファイル = 1 コミットで積んだコミット契約準拠の履歴を、未 push 範囲だけ機能単位に squash する。分類は LLM・履歴操作は決定的スクリプト（temp worktree リプレイ → 二重検証 → swap）。正常系の承認ゲートはグルーピング承認の 1 つだけ"
 allowed-tools: Read, Grep, Glob, Bash, Write, AskUserQuestion
 disable-model-invocation: true
 ---
 
 ## 目的
 
-「[[agent_name]]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット運用で積み上がった細かいコミットを、
+`commit-message-contract.sh` が検証する 1 ファイル = 1 コミット運用で積み上がった細かいコミットを、
 レビューに出せる機能単位の履歴へ組み替える。**履歴書き換えの唯一の公認経路**であり、
 生の rebase / filter-branch / force push は deny-history-rewrite.sh が deny する。
 
@@ -36,7 +36,7 @@ bash [skills_root]/rebase-squash/rebase-squash.sh --check [--base <ref>]
 ```
 
 - clean tree / merge コミットなし / **範囲の全コミットが全リモート ref から不可視** /
-  `[[agent_name]]:` 以外のコミットは境界（それより古い側は対象外）— 判定はすべてスクリプトが機械的に行う
+  `commit-message-contract.sh` の subject 契約に一致しないコミットは境界（それより古い側は対象外）— 判定はすべてスクリプトが機械的に行う
 - upstream が無いリポジトリでは `--base` が必須。どこを起点にするかはユーザーに確認する
 - `NOTHING-TO-DO` が出たら正直にそう報告して終了する。無理にやることを探さない
 
@@ -60,7 +60,7 @@ bash [skills_root]/rebase-squash/rebase-squash.sh --check [--base <ref>]
 ### GATE: グルーピング承認（停止）
 
 「元コミット → グループ → 新 subject」の対応表を提示してユーザーに承認・調整を求める。
-subject は「`[[agent_name]]: {機能}/{変更内容(日本語)}`」形式。承認が出るまで実行に進まない。
+subject の形式は `bash .[agent_name]/hooks/shell/commit-message-contract.sh --format` が出力する契約に従う。承認が出るまで実行に進まない。
 
 ### Step 2: 実行（スクリプト）
 
@@ -70,7 +70,7 @@ plan を scratchpad に JSON で Write してスクリプトに渡す:
 {
   "base": "<--check が出力した BASE の full sha>",
   "groups": [
-    { "subject": "[[agent_name]]: 契約一覧API/一覧取得APIとバリデーションスキーマを追加した",
+    { "subject": "<commit-message-contract.sh の --format に従う subject>",
       "commits": ["<sha>", "<sha>"] }
   ]
 }
@@ -82,7 +82,7 @@ bash [skills_root]/rebase-squash/rebase-squash.sh <plan.json> [--base <ref>]
 
 - groups の並び = squash 後のコミット順。グループ内の commits の並びは無視される
   （スクリプトが元履歴順に再ソートする）
-- スクリプトは実行前に plan を再検証する（base 一致 / exactly-once / subject の契約形式 /
+- スクリプトは実行前に plan を再検証する（base 一致 / exactly-once / hook と共有する subject 契約 /
   AI 署名不在）。エージェントは git コマンドで履歴に触らない — 触ろうとしても hook が deny する
 - **コンフリクトで死んだら**: 本体は無傷。交差していたグループを併合するか、並べ替えを諦めて
   「元履歴で連続している run だけを squash する」縮退 plan に組み直し、GATE からやり直す
