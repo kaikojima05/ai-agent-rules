@@ -24,7 +24,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 1. 現在の HEAD に対して、固定実行器で DeepSeek へ検出だけを委任する。task-id は `nesting-<HEAD先頭12桁>` とし、対象パスを明示する。
 
    ```bash
-   bash [skills_root]/conductor/delegate-deepseek.sh nesting nesting-<HEAD先頭12桁> <本体コードの相対パス>...
+   bash [skills_root]/deepseek/delegate.sh nesting nesting-<HEAD先頭12桁> <本体コードの相対パス>...
    ```
 
    `result: ...` で返る `.[agent_name]/tmp/deepseek/<task-id>/opencode.jsonl` と `result.json` を読む。下位モデルの検出が失敗・中断・対象外変更を起こした場合、上位モデルは自力検出へ切り替えず品質ゲートを失敗にする。
