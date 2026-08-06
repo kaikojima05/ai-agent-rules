@@ -108,6 +108,8 @@ $bootstrap codex
 
 surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最終文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。再表示と候補patchの確認には`bash [skills_root]/deepseek/delegate.sh show <task-id>`を使える。
 
+全modeのOpenCode実行には、JSONLへ新しいeventが出ない無通信timeoutと総実行時間timeoutを併用する。`smoke`は30秒無通信・1分総時間、`survey`と`nesting`は2分無通信・4分総時間、`errand`は2分無通信・5分総時間、`research`と`implement`は2分無通信・10分総時間を上限とする。timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。自動retryや途中tool出力からの結論生成は行わず、`result.json`へtimeout種別・経過時間・終了statusを記録し、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。
+
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
 ```bash

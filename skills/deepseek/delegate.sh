@@ -10,6 +10,17 @@ readonly MODEL_VARIANT="high"
 readonly SURVEY_SCOPE_COUNT="4"
 readonly SURVEY_STEPS_PER_SCOPE="3"
 readonly SURVEY_MAX_STEPS="$((SURVEY_SCOPE_COUNT * SURVEY_STEPS_PER_SCOPE))"
+readonly TIMEOUT_MINUTE_SECONDS="60"
+readonly TIMEOUT_POLL_SECONDS="5"
+readonly TIMEOUT_TERM_GRACE_SECONDS="10"
+readonly SMOKE_HARD_TIMEOUT_MINUTES="1"
+readonly SMOKE_IDLE_TIMEOUT_SECONDS="30"
+readonly SURVEY_HARD_TIMEOUT_MINUTES="4"
+readonly NESTING_HARD_TIMEOUT_MINUTES="4"
+readonly ERRAND_HARD_TIMEOUT_MINUTES="5"
+readonly RESEARCH_HARD_TIMEOUT_MINUTES="10"
+readonly IMPLEMENT_HARD_TIMEOUT_MINUTES="10"
+readonly DEFAULT_IDLE_TIMEOUT_MINUTES="2"
 readonly SMOKE_PROMPT="hello"
 readonly SMOKE_ERROR_LINE_LIMIT="20"
 readonly OPENROUTER_KEY_ENDPOINT="https://openrouter.ai/api/v1/key"
@@ -28,14 +39,84 @@ fail() {
 
 extract_report() {
   jq -rs '
-    [
-      .[]
-      | select(.type == "text")
+    def nonempty_text:
+      select(.type == "text")
       | (.part.text // .text // empty)
-      | select(type == "string" and test("[^[:space:]]"))
-    ]
-    | last // "DeepSeek returned no textual report. Inspect opencode.jsonl."
+      | select(type == "string" and test("[^[:space:]]"));
+    ([.[] | select(.type == "step_start" or .type == "step_finish")] | length) as $step_events
+    | ([.[] | select(.type == "step_finish" and .part.reason == "stop") | .timestamp] | last) as $stop_at
+    | if $step_events == 0 then
+        ([.[] | nonempty_text] | last // "DeepSeek did not return a final textual report.")
+      elif $stop_at == null then
+        "DeepSeek did not return a final textual report."
+      else
+        ([.[] | select((.timestamp // 0) <= $stop_at) | nonempty_text] | last // "DeepSeek did not return a final textual report.")
+      end
   ' "$1"
+}
+
+select_timeouts() {
+  IDLE_TIMEOUT_SECONDS="$((DEFAULT_IDLE_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))"
+  case "$MODE" in
+    smoke)
+      HARD_TIMEOUT_SECONDS="$((SMOKE_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))"
+      IDLE_TIMEOUT_SECONDS="$SMOKE_IDLE_TIMEOUT_SECONDS"
+      ;;
+    survey) HARD_TIMEOUT_SECONDS="$((SURVEY_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
+    nesting) HARD_TIMEOUT_SECONDS="$((NESTING_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
+    errand) HARD_TIMEOUT_SECONDS="$((ERRAND_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
+    research) HARD_TIMEOUT_SECONDS="$((RESEARCH_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
+    implement) HARD_TIMEOUT_SECONDS="$((IMPLEMENT_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
+    *) fail "timeout policy is not defined for mode: $MODE" ;;
+  esac
+}
+
+process_group_alive() {
+  kill -0 "-$1" 2>/dev/null
+}
+
+terminate_process_group() {
+  local process_group_id="$1"
+  kill -TERM "-$process_group_id" 2>/dev/null || kill -TERM "$process_group_id" 2>/dev/null || true
+  sleep "$TIMEOUT_TERM_GRACE_SECONDS"
+  if process_group_alive "$process_group_id"; then
+    kill -KILL "-$process_group_id" 2>/dev/null || true
+  fi
+}
+
+monitor_opencode() {
+  local process_id="$1"
+  local output_path="$2"
+  local started_at="$3"
+  local last_activity_at="$started_at"
+  local previous_size="0"
+  local current_size
+  local current_time
+  local timeout_kind
+
+  while kill -0 "$process_id" 2>/dev/null; do
+    sleep "$TIMEOUT_POLL_SECONDS"
+    current_time=$(date +%s)
+    current_size=$(wc -c < "$output_path" 2>/dev/null || printf '0')
+    current_size=$((current_size + 0))
+    if [ "$current_size" != "$previous_size" ]; then
+      previous_size="$current_size"
+      last_activity_at="$current_time"
+    fi
+
+    timeout_kind=""
+    if [ $((current_time - started_at)) -ge "$HARD_TIMEOUT_SECONDS" ]; then
+      timeout_kind="hard"
+    elif [ $((current_time - last_activity_at)) -ge "$IDLE_TIMEOUT_SECONDS" ]; then
+      timeout_kind="idle"
+    fi
+
+    if [ -n "$timeout_kind" ] && kill -0 "$process_id" 2>/dev/null; then
+      printf '%s\n' "$timeout_kind" > "$TIMEOUT_MARKER"
+      terminate_process_group "$process_id"
+      return
+    fi
+  done
 }
 
 validate_repo_path() {
@@ -116,6 +197,7 @@ fi
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v opencode >/dev/null 2>&1 || fail "opencode is required"
 [ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is not set"
+select_timeouts
 
 if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
   validate_repo_path "$SPEC_PATH"
@@ -139,6 +221,7 @@ CURL_CONFIG="$TEMP_ROOT/curl.conf"
 WORKTREE_ADDED=0
 RESULT_ROOT=""
 RESULT_STAGING=""
+TIMEOUT_MARKER="$TEMP_ROOT/timeout.kind"
 
 cleanup() {
   if [ "$WORKTREE_ADDED" -eq 1 ]; then
@@ -316,6 +399,8 @@ fi
 
 cd "$EXECUTION_ROOT" || fail "cannot enter execution root"
 set +e
+OPENCODE_STARTED_AT=$(date +%s)
+set -m
 env -i \
   HOME="$HOME" \
   PATH="$PATH" \
@@ -324,12 +409,29 @@ env -i \
   OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   OPENCODE_CONFIG="$TEMP_ROOT/opencode.json" \
   OPENCODE_DISABLE_AUTOUPDATE=true \
-  opencode --pure run --agent delegate --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR"
+  opencode --pure run --agent delegate --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR" &
+OPENCODE_PID=$!
+set +m
+monitor_opencode "$OPENCODE_PID" "$OPENCODE_OUTPUT" "$OPENCODE_STARTED_AT" &
+TIMEOUT_MONITOR_PID=$!
+wait "$OPENCODE_PID"
 OPENCODE_STATUS=$?
+kill "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
+wait "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
+OPENCODE_FINISHED_AT=$(date +%s)
+OPENCODE_ELAPSED_SECONDS="$((OPENCODE_FINISHED_AT - OPENCODE_STARTED_AT))"
+TIMED_OUT=false
+TIMEOUT_KIND=""
+FINAL_STATUS="$OPENCODE_STATUS"
+if [ -f "$TIMEOUT_MARKER" ]; then
+  TIMED_OUT=true
+  TIMEOUT_KIND=$(sed -n '1p' "$TIMEOUT_MARKER")
+  FINAL_STATUS=124
+fi
 set -e
 
 if [ "$MODE" = "smoke" ]; then
-  [ "$OPENCODE_STATUS" -eq 0 ] || { sed -n "1,${SMOKE_ERROR_LINE_LIMIT}p" "$OPENCODE_ERROR" >&2; fail "smoke request failed with status $OPENCODE_STATUS"; }
+  [ "$FINAL_STATUS" -eq 0 ] || { sed -n "1,${SMOKE_ERROR_LINE_LIMIT}p" "$OPENCODE_ERROR" >&2; fail "smoke request failed with status $FINAL_STATUS timeout=${TIMEOUT_KIND:-none}"; }
   [ -s "$OPENCODE_OUTPUT" ] || fail "smoke request returned no events"
   printf 'smoke: ok model=%s variant=%s\n' "$MODEL" "$MODEL_VARIANT"
   exit 0
@@ -381,10 +483,17 @@ jq -n \
   --arg report_file "report.md" \
   --argjson survey_max_steps "$SURVEY_MAX_STEPS" \
   --argjson opencode_status "$OPENCODE_STATUS" \
+  --argjson final_status "$FINAL_STATUS" \
+  --argjson timed_out "$TIMED_OUT" \
+  --arg timeout_kind "$TIMEOUT_KIND" \
+  --argjson elapsed_seconds "$OPENCODE_ELAPSED_SECONDS" \
+  --argjson idle_timeout_seconds "$IDLE_TIMEOUT_SECONDS" \
+  --argjson hard_timeout_seconds "$HARD_TIMEOUT_SECONDS" \
+  --argjson termination_grace_seconds "$TIMEOUT_TERM_GRACE_SECONDS" \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$CHANGED_PATHS_JSON" \
-  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,termination_grace_seconds:$termination_grace_seconds,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"
@@ -393,4 +502,4 @@ RESULT_STAGING=""
 printf 'result: %s\n' "$RESULT_ROOT"
 printf '%s\n' 'report:'
 cat "$RESULT_ROOT/report.md"
-[ "$OPENCODE_STATUS" -eq 0 ] || exit "$OPENCODE_STATUS"
+[ "$FINAL_STATUS" -eq 0 ] || exit "$FINAL_STATUS"

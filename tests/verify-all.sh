@@ -109,6 +109,7 @@ grep -q 'SOFT_BUDGET_USD="38"' "$DS" && grep -q 'HARD_BUDGET_USD="40"' "$DS" && 
 grep -q 'MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"' "$DS" && ok "DeepSeekモデル: V4 Flash latestを追従" || ng "DeepSeekモデルがlatest追従ではない"
 grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$DS" && grep -q '"reasoningEffort":$model_variant' "$DS" && grep -q -- '--variant "$MODEL_VARIANT"' "$DS" && ok "DeepSeek effort: highを明示" || ng "DeepSeek effortがhigh固定ではない"
 grep -q 'SURVEY_SCOPE_COUNT="4"' "$DS" && grep -q 'SURVEY_STEPS_PER_SCOPE="3"' "$DS" && grep -q 'SURVEY_MAX_STEPS="\$((SURVEY_SCOPE_COUNT \* SURVEY_STEPS_PER_SCOPE))"' "$DS" && grep -q '"steps":$survey_max_steps' "$DS" && grep -q -- '--agent delegate' "$DS" && ok "DeepSeek survey: 4段階ごとのagent step上限を固定" || ng "DeepSeek surveyのstep上限が不正"
+grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$DS" && grep -q 'SURVEY_HARD_TIMEOUT_MINUTES="4"' "$DS" && grep -q 'ERRAND_HARD_TIMEOUT_MINUTES="5"' "$DS" && grep -q 'RESEARCH_HARD_TIMEOUT_MINUTES="10"' "$DS" && grep -q 'DEFAULT_IDLE_TIMEOUT_MINUTES="2"' "$DS" && grep -q '^monitor_opencode()' "$DS" && grep -q '^terminate_process_group()' "$DS" && grep -q 'FINAL_STATUS=124' "$DS" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$DS" && ok "DeepSeek timeout: mode別hard上限と無出力上限を固定" || ng "DeepSeek timeout設定または記録処理が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$DS" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$DS" && ok "DeepSeek config: readonly定数をjq引数で受け渡す" || ng "DeepSeek config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
@@ -400,6 +401,35 @@ if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" er
 else
   ok "delegate-deepseek: 存在しない親directoryへの追加を拒否"
 fi
+TIMEOUT_CLOCK="$DELEGATE_REPO/timeout-clock"
+TIMEOUT_PID_FILE="$DELEGATE_REPO/timeout-opencode.pid"
+printf '#!/bin/bash\nCLOCK_FILE="%s"\nvalue=$(sed -n '\''1p'\'' "$CLOCK_FILE")\nvalue=$((value + 121))\nprintf '\''%%s\\n'\'' "$value" > "$CLOCK_FILE"\nprintf '\''%%s\\n'\'' "$value"\n' "$TIMEOUT_CLOCK" > "$DELEGATE_BIN/date"
+printf '#!/bin/bash\nif [ "${1:-}" = "5" ]; then /bin/sleep 0.05; fi\nexit 0\n' > "$DELEGATE_BIN/sleep"
+printf '0\n' > "$TIMEOUT_CLOCK"
+printf '#!/bin/bash\nprintf '\''%%s\\n'\'' "$$" > "%s"\nexec /bin/sleep 30\n' "$TIMEOUT_PID_FILE" > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/date" "$DELEGATE_BIN/sleep" "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey timeout-idle-survey "$SURVEY_EXACT_IDENTIFIER の同型実装を調査する" > delegate-timeout-idle.out 2>&1
+IDLE_TIMEOUT_STATUS=$?
+IDLE_TIMEOUT_ROOT="$DELEGATE_REPO/.claude/tmp/deepseek/timeout-idle-survey"
+IDLE_TIMEOUT_PID=$(sed -n '1p' "$TIMEOUT_PID_FILE")
+if [ "$IDLE_TIMEOUT_STATUS" -eq 124 ] && [ "$(jq -r '.timed_out' "$IDLE_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "true" ] && [ "$(jq -r '.timeout_kind' "$IDLE_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "idle" ] && [ "$(jq -r '.status' "$IDLE_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "124" ] && [ "$(jq -r '.idle_timeout_seconds' "$IDLE_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "120" ] && [ "$(jq -r '.hard_timeout_seconds' "$IDLE_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "240" ] && [ "$(jq -r '.termination_grace_seconds' "$IDLE_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "10" ] && grep -Fxq 'DeepSeek did not return a final textual report.' "$IDLE_TIMEOUT_ROOT/report.md" && ! kill -0 "$IDLE_TIMEOUT_PID" 2>/dev/null; then
+  ok "delegate-deepseek: 無出力timeoutを124で記録してprocess groupを終了"
+else
+  ng "delegate-deepseek: 無出力timeoutの終了・記録が不正"; cat delegate-timeout-idle.out
+fi
+printf '0\n' > "$TIMEOUT_CLOCK"
+printf '#!/bin/bash\nprintf '\''%%s\\n'\'' "$$" > "%s"\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"text","timestamp":2,"text":"partial"}\\n'\''\nexec /bin/sleep 30\n' "$TIMEOUT_PID_FILE" > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey timeout-hard-survey "$SURVEY_EXACT_IDENTIFIER の同型実装を調査する" > delegate-timeout-hard.out 2>&1
+HARD_TIMEOUT_STATUS=$?
+HARD_TIMEOUT_ROOT="$DELEGATE_REPO/.claude/tmp/deepseek/timeout-hard-survey"
+HARD_TIMEOUT_PID=$(sed -n '1p' "$TIMEOUT_PID_FILE")
+if [ "$HARD_TIMEOUT_STATUS" -eq 124 ] && [ "$(jq -r '.timeout_kind' "$HARD_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "hard" ] && grep -Fxq 'DeepSeek did not return a final textual report.' "$HARD_TIMEOUT_ROOT/report.md" && ! grep -Fq 'partial' "$HARD_TIMEOUT_ROOT/report.md" && ! kill -0 "$HARD_TIMEOUT_PID" 2>/dev/null; then
+  ok "delegate-deepseek: 総時間timeoutで部分出力を最終reportへ昇格しない"
+else
+  ng "delegate-deepseek: 総時間timeoutまたは部分出力の扱いが不正"; cat delegate-timeout-hard.out
+fi
+rm -f "$DELEGATE_BIN/date" "$DELEGATE_BIN/sleep" "$TIMEOUT_CLOCK" "$TIMEOUT_PID_FILE"
 printf '#!/bin/bash\ntouch protected-change.txt\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research rejected-research spec.md > delegate-rejected.out 2>&1; then
