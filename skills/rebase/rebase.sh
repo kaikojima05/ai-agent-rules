@@ -1,12 +1,12 @@
 #!/bin/bash
-# rebase-squash スキルの決定的実行スクリプト。
+# rebase スキルの決定的実行スクリプト。
 # 「[<エージェント名>]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット履歴を、未 push 範囲だけ
 # 機能単位の squash 履歴へ組み替える。履歴書き換えの唯一の公認経路
 # （生の rebase / filter-branch / force push は deny-history-rewrite.sh が deny する）。
 #
 # 使い方:
-#   rebase-squash.sh --check [--base <ref>]      # 前提検査と対象範囲の報告（履歴を変更しない）
-#   rebase-squash.sh <plan.json> [--base <ref>]  # plan に従いリプレイ実行
+#   rebase.sh --check [--base <ref>]      # 前提検査と対象範囲の報告（履歴を変更しない）
+#   rebase.sh <plan.json> [--base <ref>]  # plan に従いリプレイ実行
 #
 # 安全設計（verify-then-swap）:
 #   temp worktree で base から cherry-pick -n によるリプレイを完走させ、
@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[ -n "$MODE" ] || die "usage: rebase-squash.sh --check [--base <ref>] | rebase-squash.sh <plan.json> [--base <ref>]"
+[ -n "$MODE" ] || die "usage: rebase.sh --check [--base <ref>] | rebase.sh <plan.json> [--base <ref>]"
 
 command -v jq >/dev/null 2>&1 || die "jq が必要"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ内で実行すること"
@@ -127,11 +127,11 @@ if [ "$(printf '%s' "$PLAN_SHAS" | sort)" != "$(git rev-list "$EFFECTIVE_BASE..$
   die "plan のコミット集合が対象範囲と exactly-once で一致しない(欠落・重複・範囲外のいずれか)"
 fi
 
-BACKUP="backup/rebase-squash-$(git rev-parse --short=7 "$ORIG")"
+BACKUP="backup/rebase-$(git rev-parse --short=7 "$ORIG")"
 git show-ref --verify --quiet "refs/heads/$BACKUP" && \
   die "backup ブランチが既に存在する: ${BACKUP}。成功時は自動削除されるので、これは前回の swap が失敗した証拠。確認と削除は人間の仕事"
 
-WT=$(mktemp -d "${TMPDIR:-/tmp}/rebase-squash.XXXXXX") || die "temp dir を作れない"
+WT=$(mktemp -d "${TMPDIR:-/tmp}/rebase.XXXXXX") || die "temp dir を作れない"
 cleanup() {
   git worktree remove --force "$WT" >/dev/null 2>&1
   rm -rf "$WT"

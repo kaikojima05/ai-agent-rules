@@ -45,9 +45,9 @@ prefix_rule(
     justification = "確認済み計画を固定の.codex/e2e/.e2e.mdへ反映します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/rebase-squash/rebase-squash.sh"],
-    decision = "prompt",
-    justification = "未push履歴の変更計画とbackup作成条件を確認します。",
+    pattern = ["bash", ".agents/skills/rebase/rebase.sh"],
+    decision = "allow",
+    justification = "明示的なrebase呼び出しで、未push履歴だけを固定スクリプトで二重検証して整理します。",
 )
 prefix_rule(
     pattern = ["bash", ".codex/hooks/shell/protect-review-files.sh", "approve"],

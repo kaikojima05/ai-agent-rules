@@ -4,7 +4,7 @@
 #       commit-message-contract.sh を唯一の実装として使う。
 #       author は常にユーザー本人の git config identity（AI を author・co-author に混ぜない）。
 # 本 hook は deny 専任。適合するコミットの自動化は settings の allow(Bash(git commit:*)) が担う。
-# 例外(squash): 未 push 範囲のコミット整理は rebase-squash スキルの決定的スクリプトのみが行い、
+# 例外(squash): 未 push 範囲のコミット整理は rebase スキルの決定的スクリプトのみが行い、
 #       squash 実行器も同じ契約実装を source して subject を検証する。
 #       生の履歴書き換えコマンドの deny は deny-history-rewrite.sh が担う。
 # 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。stderr を捨てる。

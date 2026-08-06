@@ -1,5 +1,5 @@
 #!/bin/bash
-# コミット subject の唯一の契約。通常コミット hook と rebase-squash 実行器が source して使う。
+# コミット subject の唯一の契約。通常コミット hook と rebase 実行器が source して使う。
 # 配置時に init-agent が agent 名を確定する。直接実行時は prefix 生成と形式検証にも使える。
 
 COMMIT_MESSAGE_AGENT="[agent_name]"
