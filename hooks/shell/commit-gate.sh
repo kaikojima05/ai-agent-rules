@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse(Bash) hook: Git のコミット操作をリポジトリ共通の契約に適合する形だけ通す。
-# 契約: 1 ファイル = 1 コミット。コミットsubjectの形式・agent名・日本語要件は
+# 契約: 1 ファイル = 1 コミット。コミットsubjectの対象名・日本語要件は
 #       commit-subject.sh を唯一の実装として使う。
 #       author は常にユーザー本人の git config identity（AI を author・co-author に混ぜない）。
 # 本 hook は deny 専任。適合するコミットの自動化は settings の allow(Bash(git commit:*)) が担う。
@@ -28,9 +28,9 @@ echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+cherry-pick([[:space
   hook_deny "git cherry-pick は禁止です。履歴の取り込みはユーザー本人が実行してください。"
 
 if echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+commit'; then
-  # AI をコミット identity に混ぜる要素は禁止（AI 作業の表明はメッセージ先頭のタグだけ）
+  # AI をコミット identity に混ぜる要素は禁止。
   commit_message_has_forbidden_ai_signature "$CMD" && \
-    hook_deny "コミットへの AI 署名(Co-Authored-By / Generated with)は禁止です。author はユーザー本人のまま、メッセージ先頭の [$HOOK_AGENT]: だけで AI 作業を示してください。"
+    hook_deny "コミットへの AI 署名(Co-Authored-By / Generated with)は禁止です。author はユーザー本人の git config identity のままにしてください。"
   echo "$MASKED" | grep -qE -- '--author' && \
     hook_deny "--author の指定は禁止です。git config の identity(ユーザー本人)でコミットしてください。"
   echo "$MASKED" | grep -qE -- '--amend' && \
