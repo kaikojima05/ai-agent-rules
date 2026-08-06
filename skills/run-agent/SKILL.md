@@ -1,7 +1,10 @@
 ---
 name: run-agent
-description: "@.[agent_name]/prompt/ の承認済み設計書を1枚選び、[agent_name]主導・DeepSeek実装担当のTDDフローで完了させる"
-allowed-tools: Read, Bash
+description: "@.[agent_name]/prompt/ の承認済み設計書を1枚選び、[agent_name]主導・DeepSeek実装担当のTDDフローを実行し、最終報告前にclean-code品質ゲートを必ず完了させる"
+allowed-tools:
+  - Read
+  - Bash
+  - Skill(clean-code)
 disable-model-invocation: true
 ---
 
@@ -58,9 +61,16 @@ DeepSeekはテストの穴を[agent_name]へ相談できるが、テスト・設
 
 相談を解決して再委任するときは、結果ディレクトリの衝突を避けるため新しいtask-idを使う。
 
-### 5. 完了を検証する
+### 5. 完了を検証し、最終品質ゲートを通す
 
 設計書の完了条件、対象・回帰テスト、型検査、lint、レビュー、ファイル単位コミットを確認する。DeepSeekの自己申告だけで完了扱いしない。
+
+この確認の直後、index更新と最終報告の前に `clean-code` を自動で実行する。対象はこの設計書で変更した本体コードだけとし、`clean-code` は整形・lint・型検査の後に `nesting-review` を必ず実行する。
+
+- 3段階以上の制御フローネストがあれば、早期 return / continue / break / throw、条件反転、分岐表などで構造的に減らせるかを検討する
+- 深いブロックだけを関数・メソッド・callbackへ抽出して直後に呼ぶ案は採用しない。ネストを別の場所へ隠すだけで、品質を改善していないため
+- `clean-code` または `nesting-review` が変更した場合は、対象テスト・型検査・lint・レビューをやり直し、追跡対象の変更をコミットしてから次へ進む
+- 縮退できない候補は、残す根拠と却下した案が `clean-code` から返るまで完了扱いにしない
 
 ### 6. indexを完了へ変更する
 
@@ -82,6 +92,7 @@ Codexでは`.codex/rules/default.rules`、Claude Codeでは`settings.json`がこ
 - 承認されたテストシナリオ
 - DeepSeekのtask-id、相談、候補パッチの採否
 - Red、Green、回帰確認
+- clean-code の整形・lint・型検査結果と、nesting-review の候補・採否・残存根拠
 - 積んだコミット
 - indexの残件数
 
