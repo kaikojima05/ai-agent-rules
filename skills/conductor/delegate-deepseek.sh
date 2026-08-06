@@ -15,6 +15,7 @@ readonly TASK_ID_PATTERN='^[a-z0-9][a-z0-9-]{0,62}$'
 MODE="${1:-}"
 TASK_ID="${2:-}"
 SPEC_PATH="${3:-}"
+DIRECT_INSTRUCTION="${3:-}"
 NESTING_PATHS=()
 
 fail() {
@@ -43,6 +44,19 @@ case "$MODE" in
     [ "$#" -ge 3 ] || fail "$MODE mode requires task id and spec path"
     shift 3
     ;;
+  survey)
+    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
+    [ "$#" -eq 3 ] || fail "survey mode requires task id and instruction"
+    [ -n "$DIRECT_INSTRUCTION" ] || fail "survey instruction must not be empty"
+    shift 3
+    ;;
+  errand)
+    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
+    [ "$#" -ge 5 ] || fail "errand mode requires task id, instruction, --, and production paths"
+    [ -n "$DIRECT_INSTRUCTION" ] || fail "errand instruction must not be empty"
+    [ "$4" = "--" ] || fail "errand mode requires -- before production paths"
+    shift 4
+    ;;
   nesting)
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
     [ "$#" -ge 3 ] || fail "nesting mode requires task id and at least one production path"
@@ -52,7 +66,7 @@ case "$MODE" in
   smoke)
     [ "$#" -eq 1 ] || fail "smoke mode does not accept arguments"
     ;;
-  *) fail "mode must be research, implement, nesting, or smoke" ;;
+  *) fail "mode must be research, survey, implement, errand, nesting, or smoke" ;;
 esac
 command -v git >/dev/null 2>&1 || fail "git is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
@@ -130,8 +144,8 @@ if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
 fi
 
 ALLOWED_PATHS=()
-if [ "$MODE" = "implement" ]; then
-  [ "$#" -gt 0 ] || fail "implement mode requires at least one allowed production path"
+if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
+  [ "$#" -gt 0 ] || fail "$MODE mode requires at least one allowed production path"
   for path in "$@"; do
     validate_repo_path "$path"
     case "$path" in
@@ -144,7 +158,7 @@ if [ "$MODE" = "implement" ]; then
 fi
 
 EDIT_RULES='{"*":"deny"}'
-if [ "$MODE" = "implement" ]; then
+if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
   for path in "${ALLOWED_PATHS[@]}"; do
     EDIT_RULES=$(printf '%s' "$EDIT_RULES" | jq -c --arg path "$path" '. + {($path): "allow"}') || fail "cannot build edit allowlist"
   done
@@ -218,15 +232,26 @@ elif [ "$MODE" = "research" ]; then
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
+elif [ "$MODE" = "survey" ]; then
+  PROMPT="次の調査依頼についてコードベースを読み取り専用で調査してください。変更は禁止です。根拠を file:line で示し、不明点、反証候補、調査できなかった範囲を報告してください。調査依頼:\n$DIRECT_INSTRUCTION"
+  EXECUTION_ROOT="$WORKTREE"
+  OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
+  OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 elif [ "$MODE" = "nesting" ]; then
   NESTING_LIST=$(printf '%s\n' "${NESTING_PATHS[@]}" | sed 's/^/- /')
   PROMPT="次の本体コードだけを読み取り専用で検査してください。修正案・コード変更は不要です。if/else、loop、switch、try/catch/finally が同じ実行経路で三段階以上重なる候補だけを検出し、各候補を file:line、最大深さ、到達条件、該当する制御構造の順で報告してください。else if は一つの選択、switch の case は switch より深く数えません。候補が無ければ『3段階以上の制御フローネストなし』と明記してください。指定外のファイルは検出対象にしません。対象ファイル:\n$NESTING_LIST"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
-else
+elif [ "$MODE" = "implement" ]; then
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
   PROMPT="承認済み設計 .deepseek-request/spec.md に従い、次の本体コードだけを実装してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
+  EXECUTION_ROOT="$WORKTREE"
+  OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
+  OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
+else
+  ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
+  PROMPT="次の短い実装指示に従い、許可された本体コードだけを実装してください。テスト、設定、Git、設計資産を変更させないでください。要件が曖昧、または許可外の変更が必要なら変更せず consultation_required として根拠を報告してください。実装指示:\n$DIRECT_INSTRUCTION\n許可ファイル:\n$ALLOWED_LIST"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
@@ -257,7 +282,7 @@ if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
   rm -rf "$WORKTREE/.deepseek-request"
 fi
 
-if [ "$MODE" = "implement" ]; then
+if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
   git add -N -- "${ALLOWED_PATHS[@]}" >/dev/null 2>&1 || true
 fi
 
@@ -283,7 +308,7 @@ else
   CHANGED_PATHS_JSON='[]'
 fi
 
-if [ "$MODE" = "implement" ]; then
+if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
   git diff --binary -- "${ALLOWED_PATHS[@]}" > "$RESULT_STAGING/candidate.patch" || fail "cannot create candidate patch"
 else
   : > "$RESULT_STAGING/candidate.patch"
