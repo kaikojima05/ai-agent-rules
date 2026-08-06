@@ -1,13 +1,13 @@
 ---
-name: clean-code
-description: 実装完了後に変更済みコードへフォーマッタ・リンター・型検査を適用し、DeepSeek が検出した三段階以上の制御フローネストだけを nesting-review で構造的に見直す。
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Skill(nesting-review)
+name: polish
+description: 実装完了後に変更済みコードへフォーマッタ・リンター・型検査を適用し、DeepSeek が検出した三段階以上の制御フローネストだけを unwind で構造的に見直す。
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Skill(unwind)
 disable-model-invocation: true
 ---
 
 ## 目的
 
-未ステージング・ステージング済みの変更ファイルに対して、コードの品質維持およびプロジェクトのスタイルガイドへの準拠を目的として、自動整形（Format）と静的解析（Lint）を実行する。呼び出し元にかかわらず、整形・lint・型検査の後に `nesting-review` を必ず実行する。
+未ステージング・ステージング済みの変更ファイルに対して、コードの品質維持およびプロジェクトのスタイルガイドへの準拠を目的として、自動整形（Format）と静的解析（Lint）を実行する。呼び出し元にかかわらず、整形・lint・型検査の後に `unwind` を必ず実行する。
 
 ## ガイドライン
 
@@ -46,18 +46,18 @@ disable-model-invocation: true
 
 ## 制御フローネストの品質ゲート
 
-親スキルは、機能名と変更済み**追跡済み本体コードの相対パス**を `clean-code` へ渡す。情報が不足した場合、`clean-code` は上位モデルに差分探索をさせず、品質ゲートを失敗にする。
+親スキルは、機能名と変更済み**追跡済み本体コードの相対パス**を `polish` へ渡す。情報が不足した場合、`polish` は上位モデルに差分探索をさせず、品質ゲートを失敗にする。
 
-整形・lint・型検査の後に `nesting-review` を必ず呼ぶ。`nesting-review` は固定実行器を通じて DeepSeek にネスト検出だけを委任する。上位モデルはその検出結果にある箇所だけを読み、早期 return 等で構造的に減らせるかを検討する。関数抽出で深さを別の場所へ隠してはならない。
+整形・lint・型検査の後に `unwind` を必ず呼ぶ。`unwind` は固定実行器を通じて DeepSeek にネスト検出だけを委任する。上位モデルはその検出結果にある箇所だけを読み、早期 return 等で構造的に減らせるかを検討する。関数抽出で深さを別の場所へ隠してはならない。
 
-`nesting-review` がコードを変更した場合は、対象テスト・型検査・lintを再実行し、通常の変更と同じ単位でコミットした後、DeepSeek へ再検出を委任する。縮退できない候補がある場合も、下位モデルの task-id・結果パス・理由と却下案を最終報告用に返すまで完了扱いにしない。
+`unwind` がコードを変更した場合は、対象テスト・型検査・lintを再実行し、通常の変更と同じ単位でコミットした後、DeepSeek へ再検出を委任する。縮退できない候補がある場合も、下位モデルの task-id・結果パス・理由と却下案を最終報告用に返すまで完了扱いにしない。
 
-## run-agent への完了通知
+## conductor への完了通知
 
-`run-agent` から機能名と本体コードの相対パス一覧を渡されて実行した場合は、すべての品質ゲート（DeepSeek による再検出を含む）を終え、追跡対象の変更をコミットした後に次を実行する。
+`conductor` から機能名と本体コードの相対パス一覧を渡されて実行した場合は、すべての品質ゲート（DeepSeek による再検出を含む）を終え、追跡対象の変更をコミットした後に次を実行する。
 
 ```bash
-bash [skills_root]/clean-code/quality-gate.sh record <機能名>
+bash [skills_root]/polish/quality-gate.sh record <機能名>
 ```
 
 この receipt は現在の HEAD と追跡対象の clean 状態を結び付ける。失敗した場合は完了を報告せず、変更の検証とコミットをやり直す。

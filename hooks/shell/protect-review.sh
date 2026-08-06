@@ -3,7 +3,7 @@
 # レビュー対象ファイルは読み取りを許可し、Codex ではユーザー承認済みの apply_patch だけ通す。
 REVIEW_FILE_PATH_RE='(^|/)(package\.json|schema\.prisma|Dockerfile[^/]*|docker-compose[^/]*|[^/]+\.tf)$|(^|/)(\.github/workflows|migrations)(/|$)'
 REVIEW_FILE_COMMAND_RE="package\\.json|schema\\.prisma|Dockerfile|docker-compose|\\.tf([[:space:]\\\"']|$)|\\.github/workflows|migrations/"
-REVIEW_APPROVAL_USAGE="bash .codex/hooks/shell/protect-review-files.sh approve <対象パス>"
+REVIEW_APPROVAL_USAGE="bash .codex/hooks/shell/protect-review.sh approve <対象パス>"
 
 review_repo_root() { git rev-parse --show-toplevel 2>/dev/null; }
 

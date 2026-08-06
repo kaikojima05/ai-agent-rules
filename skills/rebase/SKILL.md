@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 ## 目的
 
-`commit-message-contract.sh` が検証する 1 ファイル = 1 コミット運用で積み上がった細かいコミットを、
+`commit-subject.sh` が検証する 1 ファイル = 1 コミット運用で積み上がった細かいコミットを、
 レビューに出せる機能単位の履歴へ組み替える。**履歴書き換えの唯一の公認経路**であり、
 生の rebase / filter-branch / force push は deny-history.sh が deny する。
 
@@ -29,7 +29,7 @@ bash [skills_root]/rebase/rebase.sh --check [--base <ref>]
 ```
 
 - clean tree / merge コミットなし / **範囲の全コミットが全リモート ref から不可視** /
-  `commit-message-contract.sh` の subject 契約に一致しないコミットは境界（それより古い側は対象外）— 判定はすべてスクリプトが機械的に行う
+  `commit-subject.sh` の subject 契約に一致しないコミットは境界（それより古い側は対象外）— 判定はすべてスクリプトが機械的に行う
 - upstream が無いリポジトリでは `--base` が必須。推測で起点を選ばず、その理由を報告して停止する
 - `NOTHING-TO-DO` が出たら正直にそう報告して終了する。無理にやることを探さない
 
@@ -58,7 +58,7 @@ plan を `${TMPDIR:-/tmp}/codex-rebase-<機能名>-plan.json` の scratch JSON �
 {
   "base": "<--check が出力した BASE の full sha>",
   "groups": [
-    { "subject": "<commit-message-contract.sh の --format に従う subject>",
+    { "subject": "<commit-subject.sh の --format に従う subject>",
       "commits": ["<sha>", "<sha>"] }
   ]
 }
@@ -83,7 +83,7 @@ squash 後の履歴・元 HEAD の sha・検証結果（tree 一致 / exactly-on
 - **push はしない**。squash 後の履歴を最終確認して push するのは人間の仕事
 - backup ブランチは残らない。swap の間だけ張る一時的な足場で、成功したらスクリプトが自ら削除する
   （元 HEAD は reflog から辿れる）。`backup/rebase-*` が残っていたら swap が失敗した証拠なので、
-  その確認と削除は人間の仕事（エージェントによる削除は deny-history-rewrite.sh が deny する）
+  その確認と削除は人間の仕事（エージェントによる削除は deny-history.sh が deny する）
 
 ## 注意事項
 

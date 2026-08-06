@@ -1,6 +1,6 @@
 #!/bin/bash
-# init-agent: 配置済みエージェント設定ツリーの placeholder を確定させる決定的スクリプト。
-# [agent_name] / [skills_root] の置換と [NOTE]: init-agent 対象 ブロックの解決を、
+# bootstrap: 配置済みエージェント設定ツリーの placeholder を確定させる決定的スクリプト。
+# [agent_name] / [skills_root] の置換と [NOTE]: bootstrap 対象 ブロックの解決を、
 # レビュー済みの単一成果物として実行する（その都度インタプリタで書き捨てコードを生成しないため）。
 # 使い方: bash init-agent.sh <claude|codex>
 # 失敗の扱い: 置換失敗・[NOTE] 未解決（tmp 書き込み不能 / bare if 不在）が 1 件でも
@@ -34,7 +34,7 @@ esac
 # set -e はパイプライン内 while で期待どおり働かないので使わず、明示的に成否判定する
 FAILED=0
 
-# 1) placeholder 置換: init-agent スキル自身（placeholder の説明文と処理本体）は除外する
+# 1) placeholder 置換: bootstrap スキル自身（placeholder の説明文と処理本体）は除外する
 while IFS= read -r f; do
   if sed -i.bak "s|\[skills_root\]|$SKILLS_ROOT|g; s/\[agent_name\]/$NAME/g" "$f"; then
     rm -f "$f.bak"
@@ -44,14 +44,14 @@ while IFS= read -r f; do
     echo "ERROR: replace failed (sed): $f" >&2
     FAILED=1
   fi
-done < <(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS | grep -v '/init-agent/')
+done < <(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS | grep -v '/bootstrap/')
 
-# 2) [NOTE] 解決: [NOTE] 行から直後の bare if 行までを確定条件へ畳む（init-agent 自身は除外）
+# 2) [NOTE] 解決: [NOTE] 行から直後の bare if 行までを確定条件へ畳む（bootstrap 自身は除外）
 while IFS= read -r f; do
   WAS_EXECUTABLE=false
   [ -x "$f" ] && WAS_EXECUTABLE=true
   if ! awk -v cond="$COND" '
-    /\[NOTE\]: init-agent/ { skip=1; next }
+    /\[NOTE\]: bootstrap/ { skip=1; next }
     skip && /^[[:space:]]*if[[:space:]]*$/ { print cond; skip=0; next }
     skip { next }
     { print }
@@ -82,12 +82,12 @@ while IFS= read -r f; do
     echo "ERROR: cannot overwrite (mv failed): $f" >&2
     FAILED=1
   fi
-done < <(grep -rl '\[NOTE\]: init-agent' $TARGETS | grep -v '/init-agent/')
+done < <(grep -rl '\[NOTE\]: bootstrap' $TARGETS | grep -v '/bootstrap/')
 
 # 3) 置換後検証: 承認済みの固定スクリプト内で完結させ、別の shell 承認を発生させない
 while IFS= read -r f; do
   echo "ERROR: unresolved placeholder: $f" >&2
   FAILED=1
-done < <(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS | grep -v '/init-agent/')
+done < <(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS | grep -v '/bootstrap/')
 
 exit "$FAILED"

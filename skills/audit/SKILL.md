@@ -1,5 +1,5 @@
 ---
-name: rule-audit
+name: audit
 description: git diff を AGENTS.md / rules/**/*.md と突き合わせ、規約違反箇所を機械的に列挙する。
 allowed-tools: Read, Grep, Glob, Bash
 disable-model-invocation: true
@@ -63,7 +63,7 @@ Step 1 のコマンドで diff を取り、`+` 行（追加された行）と `-
 
 違反一覧を提示したあと、ユーザーに次のアクションを尋ねる。
 
-- 全件まとめて直すなら `/clean-code` を提案
+- 全件まとめて直すなら `/polish` を提案
 - 個別に修正するなら該当ファイルだけを Edit する旨を提案
 
 ユーザー承認なしに勝手に修正してはならない。あくまで **検出 + 提案** までで停止する。

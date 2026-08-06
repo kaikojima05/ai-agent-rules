@@ -39,14 +39,14 @@ preflight が付けた **明示要件**、**禁止・制約**、**受入済み t
 - Why: ユーザーがレビューする対象なので、エディタでそのまま開ける場所に置く。セッションの一時領域（scratchpad / `$TMPDIR`）はパスが不規則でユーザーが確認しづらい
 - Why: `.[agent_name]/` は sandbox の denyWrite で保護されておりエージェントは直接書き込めない。`draft-prompt/` は保護対象外なので通常の Write / Edit で往復でき、保護領域への書き込みは Step 5 の固定スクリプト 1 回に集約される
 - `draft-prompt/` は Step 5 でスクリプトが畳むまでの一時的な置き場。**コミットしてはならない**（`git add` の対象に含めない。恒久的に無視したいならプロジェクトの `.gitignore` に足すのはユーザーの判断）
-- ドラフトの改訂は **Edit** で行う。既存ファイルへの Write（全上書き）は `guard-overwrite.sh` が ask に倒すため、レビュー往復のたびに承認プロンプトが出る（新規作成の Write は素通りするので初回作成はそのままでよい）
+- ドラフトの改訂は **Edit** で行う。既存ファイルへの Write（全上書き）は `overwrite.sh` が ask に倒すため、レビュー往復のたびに承認プロンプトが出る（新規作成の Write は素通りするので初回作成はそのままでよい）
 
 ### Step 3: draft mode でコードベース調査を委任する
 
 各設計書の初期ドラフトを、固定実行器の`research`モードへ1枚ずつ渡す。
 
 ```
-bash [skills_root]/run-agent/delegate-deepseek.sh research <task-id> draft-prompt/branch-<機能名>-prompt.md
+bash [skills_root]/conductor/delegate-deepseek.sh research <task-id> draft-prompt/branch-<機能名>-prompt.md
 ```
 
 - DeepSeekは読み取り専用とし、コード、テスト、設計ドラフトを変更させない
@@ -85,7 +85,7 @@ bash [skills_root]/cowlick/apply-prompt.sh
   - Note: 消せるのは固定パスの `draft-prompt/` と、そこにある検証済みの index / 設計書だけ。**引数を受け取らないため削除先を外から動かせず**、`rm` の ask ゲートを迂回する任意ファイル削除の抜け道にならない。この性質を壊すので、後からドラフトのパスを引数で受け取れるようにしてはならない
   - `rmdir` で畳むため、想定外のファイルが残っていればディレクトリは消えずに警告が出る（再帰削除で巻き込むことはない）
 - 前タスクの `branch-*-prompt.md` が宛先に残っていた場合は、今回の一式に無いものだけをスクリプトが削除する
-  - Why: 残骸があると index と実体が食い違い、run-agent が前タスクの設計書を実装してしまう
+  - Why: 残骸があると index と実体が食い違い、conductor が前タスクの設計書を実装してしまう
 
 - Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る（sandbox 内では denyWrite の `.[agent_name]` に阻まれて必ず失敗する）
   - `excludedCommands` と事前 allow はコマンド文字列の照合で決まるため、必ずプロジェクトルートから**上記の 1 行をそのまま単独で**実行すること。以下はいずれも照合を外し、sandbox 内実行の失敗と承認プロンプトを復活させる
@@ -106,7 +106,7 @@ bash [skills_root]/cowlick/apply-prompt.sh
 
 - Why: 構成を書き手の裁量に任せると、使用するモデルや reasoning effort によって出力の粒度が大きくブレる。形式を固定し、どのモデルが書いても同じ粒度の設計書になるようにする
 - Why: 巨大なタスクでも文章の要約なら数十行に収まってしまい、最終的な実装規模が読めない。設計書の枚数と Changes の行数が、そのままタスク規模の見積もりとして機能するようにする
-- Why: 設計書をファイルとして分けることで、run-agent が 1 枚だけ読んで 1 枚だけ実装できる。index のチェックボックスがそのまま進捗になる
+- Why: 設計書をファイルとして分けることで、conductor が 1 枚だけ読んで 1 枚だけ実装できる。index のチェックボックスがそのまま進捗になる
 
 ### 機能名の付け方
 
@@ -136,7 +136,7 @@ bash [skills_root]/cowlick/apply-prompt.sh
 
 - 並び順 = 実装順。依存がある場合は依存される側を先に置く
 - `- [ ] <ファイル名>` 以外の形式で書くと apply-prompt.sh が弾く（見出しや説明文の行は自由）
-- `[x]` に倒すのは run-agent の仕事。cowlick では全件 `[ ]` で出す
+- `[x]` に倒すのは conductor の仕事。cowlick では全件 `[ ]` で出す
 
 ### 設計書（branch-<機能名>-prompt.md）のテンプレート
 
@@ -144,7 +144,7 @@ Summary / Changes / 対象ファイル / 参照ルール / 完了条件 のセ�
 
 - **Summary**: この機能で何をするかを 1〜2 行で書く
 - **Changes**: 具体的な変更内容を、後述の疑似コード形式の文章で書く
-- **完了条件**: 各設計書に持たせる（run-agent は 1 枚だけ読んで 1 枚だけ実装するため、1 枚で自己完結させる）
+- **完了条件**: 各設計書に持たせる（conductor は 1 枚だけ読んで 1 枚だけ実装するため、1 枚で自己完結させる）
 
 ### Changes の書き方
 

@@ -1,12 +1,12 @@
 ---
-name: nesting-review
-description: "clean-code の最終品質ゲートから呼ばれ、DeepSeek に変更済み本体コードの三段階以上の制御フローネスト検出だけを委任する。上位モデルは検出結果の箇所だけを早期脱出・条件反転・分岐表などで構造的に修正し、ネストを隠す関数抽出は許可しない。"
+name: unwind
+description: "polish の最終品質ゲートから呼ばれ、DeepSeek に変更済み本体コードの三段階以上の制御フローネスト検出だけを委任する。上位モデルは検出結果の箇所だけを早期脱出・条件反転・分岐表などで構造的に修正し、ネストを隠す関数抽出は許可しない。"
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
 ## 目的
 
-変更済みの本体コードについて、同じ実行経路に制御構造が3段階以上重なる箇所を、意味を保ったまま2段階以下へ減らす。`clean-code` の内部品質ゲートとしてだけ実行する。
+変更済みの本体コードについて、同じ実行経路に制御構造が3段階以上重なる箇所を、意味を保ったまま2段階以下へ減らす。`polish` の内部品質ゲートとしてだけ実行する。
 
 検出は上位モデルが行わない。DeepSeek の読み取り専用・隔離 worktree に委任し、上位モデルは返却された候補の修正・却下判断と検証だけを担当する。
 
@@ -24,7 +24,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 1. 現在の HEAD に対して、固定実行器で DeepSeek へ検出だけを委任する。task-id は `nesting-<HEAD先頭12桁>` とし、対象パスを明示する。
 
    ```bash
-   bash [skills_root]/run-agent/delegate-deepseek.sh nesting nesting-<HEAD先頭12桁> <本体コードの相対パス>...
+   bash [skills_root]/conductor/delegate-deepseek.sh nesting nesting-<HEAD先頭12桁> <本体コードの相対パス>...
    ```
 
    `result: ...` で返る `.[agent_name]/tmp/deepseek/<task-id>/opencode.jsonl` と `result.json` を読む。下位モデルの検出が失敗・中断・対象外変更を起こした場合、上位モデルは自力検出へ切り替えず品質ゲートを失敗にする。
@@ -35,7 +35,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
    - 相互排他的な分岐を `switch`、状態表、dispatch map、データ駆動の選択へ置き換える
    - ループの不要な反復を先に除外し、必要な処理だけを直線化する
 4. 振る舞いを保てる案があれば、検出済み箇所だけへ適用し、対象テスト・型検査・lintを再実行する。コードを変更してコミットした場合は、新しい HEAD を対象に Step 1 から再検出する。
-5. 安全な縮退案が無い場合は、深さを残す根拠と却下した案を `clean-code` へ返す。未検討のまま最終報告へ進まない。
+5. 安全な縮退案が無い場合は、深さを残す根拠と却下した案を `polish` へ返す。未検討のまま最終報告へ進まない。
 
 ## 禁止する見せかけの縮退
 
@@ -49,4 +49,4 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## 返却内容
 
-`clean-code` へ DeepSeek の task-id・結果パス・候補ごとの最大深さ・到達条件・採用した縮退または残した根拠・実行した検証を返す。候補が無ければ、下位モデルの結果ログを根拠に「3段階以上の制御フローネストなし」と明示する。
+`polish` へ DeepSeek の task-id・結果パス・候補ごとの最大深さ・到達条件・採用した縮退または残した根拠・実行した検証を返す。候補が無ければ、下位モデルの結果ログを根拠に「3段階以上の制御フローネストなし」と明示する。

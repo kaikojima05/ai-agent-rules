@@ -4,9 +4,9 @@
 #       （未 push 範囲・tree 同一性検証を条件とする squash）。
 #       スクリプトの呼び出しは git コマンドではないため本 hook には掛からず、
 #       settings / rules の固定 allow により、明示的なスキル呼び出しは追加承認なしで実行する。
-# 役割分担: git commit --amend の deny は enforce-agent-commit.sh が担う。
+# 役割分担: git commit --amend の deny は commit-gate.sh が担う。
 #       git reset --hard は履歴書き換えではなく作業ツリー破壊なので対象外（ask 層が担う）。
-#       .git ディレクトリ自体を狙う破壊系コマンドの deny は protect-git-dir.sh が担う。
+#       .git ディレクトリ自体を狙う破壊系コマンドの deny は protect-git.sh が担う。
 # 本 hook はコマンド文字列検査のトリップワイヤであり、迂回への最終防壁は
 # unpush 範囲検証と push 済み履歴（sandbox が守るのは .git/hooks と .git/config のみ）。
 exec 2>/dev/null

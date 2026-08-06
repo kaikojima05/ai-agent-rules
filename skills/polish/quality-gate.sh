@@ -1,5 +1,5 @@
 #!/bin/bash
-# clean-code 完了の receipt を記録・検証する固定実行器。
+# polish 完了の receipt を記録・検証する固定実行器。
 # receipt は一時領域に置き、設計書の index や作業ツリーを汚さない。
 set -u
 
@@ -15,24 +15,24 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ�
 
 REPOSITORY=$(git rev-parse --show-toplevel)
 REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
-RECEIPT_DIR="${TMPDIR:-/tmp}/clean-code-quality-gate/$REPOSITORY_KEY"
+RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 RECEIPT="$RECEIPT_DIR/$FEATURE"
 
 case "$MODE" in
   record)
-    git diff --quiet || die "未ステージングの追跡対象変更がある。clean-code後の変更を検証・コミットしてから記録すること"
-    git diff --cached --quiet || die "stage済み変更がある。clean-code後の変更をコミットしてから記録すること"
+    git diff --quiet || die "未ステージングの追跡対象変更がある。polish後の変更を検証・コミットしてから記録すること"
+    git diff --cached --quiet || die "stage済み変更がある。polish後の変更をコミットしてから記録すること"
     mkdir -p "$RECEIPT_DIR" || die "quality gate receipt用の一時ディレクトリを作れない"
     HEAD=$(git rev-parse HEAD)
     printf '%s\n%s\n' "$REPOSITORY" "$HEAD" > "$RECEIPT" || die "quality gate receiptを記録できない"
     echo "recorded: $FEATURE $HEAD"
     ;;
   verify)
-    [ -f "$RECEIPT" ] || die "clean-code品質ゲートのreceiptが無い: $FEATURE"
+    [ -f "$RECEIPT" ] || die "polish品質ゲートのreceiptが無い: $FEATURE"
     EXPECTED_REPOSITORY=$(sed -n '1p' "$RECEIPT")
     EXPECTED_HEAD=$(sed -n '2p' "$RECEIPT")
     [ "$EXPECTED_REPOSITORY" = "$REPOSITORY" ] || die "quality gate receiptのリポジトリが一致しない"
-    [ "$EXPECTED_HEAD" = "$(git rev-parse HEAD)" ] || die "clean-code後にHEADが変わった。品質ゲートを再実行して記録し直すこと"
+    [ "$EXPECTED_HEAD" = "$(git rev-parse HEAD)" ] || die "polish後にHEADが変わった。品質ゲートを再実行して記録し直すこと"
     git diff --quiet || die "receipt記録後に未ステージングの追跡対象変更がある"
     git diff --cached --quiet || die "receipt記録後にstage済み変更がある"
     ;;

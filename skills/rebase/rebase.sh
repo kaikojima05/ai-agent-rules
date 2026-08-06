@@ -2,7 +2,7 @@
 # rebase スキルの決定的実行スクリプト。
 # 「[<エージェント名>]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット履歴を、未 push 範囲だけ
 # 機能単位の squash 履歴へ組み替える。履歴書き換えの唯一の公認経路
-# （生の rebase / filter-branch / force push は deny-history-rewrite.sh が deny する）。
+# （生の rebase / filter-branch / force push は deny-history.sh が deny する）。
 #
 # 使い方:
 #   rebase.sh --check [--base <ref>]      # 前提検査と対象範囲の報告（履歴を変更しない）
@@ -40,7 +40,7 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ�
 
 # 通常コミット hook と同じ配置済み契約を読む。subject の規則をこの実行器に複製しない。
 REPO_ROOT=$(git rev-parse --show-toplevel)
-COMMIT_MESSAGE_CONTRACT="$REPO_ROOT/.[agent_name]/hooks/shell/commit-message-contract.sh"
+COMMIT_MESSAGE_CONTRACT="$REPO_ROOT/.[agent_name]/hooks/shell/commit-subject.sh"
 [ -r "$COMMIT_MESSAGE_CONTRACT" ] || die "コミットsubject契約が無い: $COMMIT_MESSAGE_CONTRACT"
 . "$COMMIT_MESSAGE_CONTRACT"
 AGENT_TAG="$COMMIT_MESSAGE_AGENT"

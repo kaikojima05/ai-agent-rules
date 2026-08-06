@@ -1,5 +1,5 @@
 #!/bin/bash
-# mark-prompt-done: run-agent が実装を終えた設計書を、.[agent_name]/prompt/.prompt.md の
+# mark-prompt-done: conductor が実装を終えた設計書を、.[agent_name]/prompt/.prompt.md の
 # 実装順リスト上で [ ] から [x] へ倒す。
 # .[agent_name]/ は sandbox の denyWrite で保護されておりエージェントは直接書き込めないため、
 # 進捗の記録もこの固定処理へ閉じ込める。本スクリプトにできるのは「対象 1 行のチェックボックスを
@@ -17,12 +17,12 @@ die(){ echo "ERROR: $1" >&2; exit 1; }
 
 [[ "$NAME" =~ $NAME_RE ]] || die "invalid 機能名: $NAME (ASCII kebab-case only)"
 ENTRY="branch-$NAME-prompt.md"
-QUALITY_GATE="$(dirname "$0")/../clean-code/quality-gate.sh"
+QUALITY_GATE="$(dirname "$0")/../polish/quality-gate.sh"
 
 [ -L "$INDEX" ] && die "index is a symlink: $INDEX"
 [ -f "$INDEX" ] || die "index not found: $INDEX"
-[ -x "$QUALITY_GATE" ] || die "clean-code品質ゲートが無い: $QUALITY_GATE"
-"$QUALITY_GATE" verify "$NAME" || die "clean-code品質ゲートが未完了: $NAME"
+[ -x "$QUALITY_GATE" ] || die "polish品質ゲートが無い: $QUALITY_GATE"
+"$QUALITY_GATE" verify "$NAME" || die "polish品質ゲートが未完了: $NAME"
 
 ESC=$(printf '%s' "$ENTRY" | sed 's/\./\\./g')
 grep -qE "^[[:space:]]*-[[:space:]]*\[[ xX]\][[:space:]]+$ESC[[:space:]]*$" "$INDEX" \

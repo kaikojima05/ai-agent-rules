@@ -1,10 +1,10 @@
 ---
-name: run-agent
-description: "@.[agent_name]/prompt/ の承認済み設計書を1枚選び、[agent_name]主導・DeepSeek実装担当のTDDフローを実行し、最終報告前にclean-code品質ゲートを必ず完了させる"
+name: conductor
+description: "@.[agent_name]/prompt/ の承認済み設計書を1枚選び、[agent_name]主導・DeepSeek実装担当のTDDフローを実行し、最終報告前にpolish品質ゲートを必ず完了させる"
 allowed-tools:
   - Read
   - Bash
-  - Skill(clean-code)
+  - Skill(polish)
 disable-model-invocation: true
 ---
 
@@ -42,9 +42,9 @@ disable-model-invocation: true
 
 対象本体コードに未コミット変更があれば、ユーザー変更との衝突として停止する。
 
-### 3. tdd-runをフル実行する
+### 3. tddをフル実行する
 
-コード変更を伴う場合は`tdd-run`へ従う。
+コード変更を伴う場合は`tdd`へ従う。
 
 1. [agent_name]がテストシナリオを提案し、ユーザーの一括承認を得る
 2. [agent_name]がテストを書き、追跡対象ならファイル単位で即コミットする。無視されたテスト資産は強制stageせず、作業ツリー上で検証して継続する
@@ -65,22 +65,22 @@ DeepSeekはテストの穴を[agent_name]へ相談できるが、テスト・設
 
 設計書の完了条件、対象・回帰テスト、型検査、lint、レビュー、ファイル単位コミットを確認する。DeepSeekの自己申告だけで完了扱いしない。
 
-この確認の直後、index更新と最終報告の前に `clean-code` を自動で実行する。機能名と、この設計書で変更してコミットした追跡済み本体コードの相対パス一覧を必ず渡す。`clean-code` はその一覧を DeepSeek のネスト検出へ渡すため、上位モデルが改めて差分探索して対象を補完してはならない。`clean-code` の品質ゲートが完了しなければ、index更新と最終報告へ進まない。
+この確認の直後、index更新と最終報告の前に `polish` を自動で実行する。機能名と、この設計書で変更してコミットした追跡済み本体コードの相対パス一覧を必ず渡す。`polish` はその一覧を DeepSeek のネスト検出へ渡すため、上位モデルが改めて差分探索して対象を補完してはならない。`polish` の品質ゲートが完了しなければ、index更新と最終報告へ進まない。
 
-- `clean-code` が変更した場合は、対象テスト・型検査・lint・レビューをやり直し、追跡対象の変更をコミットしてから次へ進む
-- 品質ゲートが残した候補や根拠は、`clean-code` の結果として受け取り、未解決のまま完了扱いにしない
-- `clean-code` が完了後に返す機能名で、品質ゲートの receipt を記録する。記録できなければ次へ進まない
+- `polish` が変更した場合は、対象テスト・型検査・lint・レビューをやり直し、追跡対象の変更をコミットしてから次へ進む
+- 品質ゲートが残した候補や根拠は、`polish` の結果として受け取り、未解決のまま完了扱いにしない
+- `polish` が完了後に返す機能名で、品質ゲートの receipt を記録する。記録できなければ次へ進まない
 
 ```bash
-bash [skills_root]/clean-code/quality-gate.sh record <機能名>
+bash [skills_root]/polish/quality-gate.sh record <機能名>
 ```
 
 ### 6. indexを完了へ変更する
 
-すべて満たし、同じ機能名・現在の HEAD の `clean-code` receipt が記録済みの場合だけ固定スクリプトを実行する。スクリプト自身も receipt を再検証するため、記録のない状態で `[x]` へ進めない。
+すべて満たし、同じ機能名・現在の HEAD の `polish` receipt が記録済みの場合だけ固定スクリプトを実行する。スクリプト自身も receipt を再検証するため、記録のない状態で `[x]` へ進めない。
 
 ```bash
-bash [skills_root]/run-agent/mark-prompt-done.sh <機能名>
+bash [skills_root]/conductor/mark-prompt-done.sh <機能名>
 ```
 
 `<機能名>`は`branch-`と`-prompt.md`を除いた部分とする。既に`[x]`なら対象取り違えとして停止する。スクリプトのパスや呼び出し形式を変えず、複合コマンドにしない。
@@ -95,23 +95,23 @@ Codexでは`.codex/rules/default.rules`、Claude Codeでは`settings.json`がこ
 - 承認されたテストシナリオ
 - DeepSeekの実装・ネスト検出のtask-id、相談、候補パッチの採否
 - Red、Green、回帰確認
-- clean-code の品質ゲート結果
+- polish の品質ゲート結果
 - 積んだコミット
 - indexの残件数
 
-設計書1枚を1ブランチ・1PRの単位とし、続きはユーザーが改めて`/run-agent`を呼ぶ。
+設計書1枚を1ブランチ・1PRの単位とし、続きはユーザーが改めて`/conductor`を呼ぶ。
 
 ## DeepSeek固定実行器
 
 ```bash
 # 読み取り専用調査
-bash [skills_root]/run-agent/delegate-deepseek.sh research <task-id> <設計書>
+bash [skills_root]/conductor/delegate-deepseek.sh research <task-id> <設計書>
 
 # 隔離worktreeで本体コードだけ実装
-bash [skills_root]/run-agent/delegate-deepseek.sh implement <task-id> <設計書> <許可する本体コード>...
+bash [skills_root]/conductor/delegate-deepseek.sh implement <task-id> <設計書> <許可する本体コード>...
 
 # OpenCode・OpenRouter・対象モデルへの疎通だけ確認
-bash [skills_root]/run-agent/delegate-deepseek.sh smoke
+bash [skills_root]/conductor/delegate-deepseek.sh smoke
 ```
 
 実行器はOpenRouterの対象期間使用量38 USDで停止し、API keyに40 USD以下の月次またはリセットなしhard limitがあることを検証する。ZDRと`data_collection: deny`をリクエストでも強制し、OpenCodeの外部プラグインを無効化する。

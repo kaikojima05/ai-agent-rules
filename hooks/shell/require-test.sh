@@ -3,9 +3,9 @@ exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 TOOL=$(hook_tool_name)
 
-# codex では skill-session marker（$tdd-run 起動時に skill-session.sh が記録）が
-# 現セッションを指す時だけ執行する。claude は tdd-run の frontmatter hooks が起動を絞る
-if [ "$HOOK_AGENT" = "codex" ] && ! hook_skill_session_active "tdd-run"; then
+# codex では session marker（$tdd 起動時に session.sh が記録）が
+# 現セッションを指す時だけ執行する。claude は tdd の frontmatter hooks が起動を絞る
+if [ "$HOOK_AGENT" = "codex" ] && ! hook_skill_session_active "tdd"; then
   exit 0
 fi
 
@@ -14,7 +14,7 @@ fi
 # allow(Edit(**)/Write(**)) が既に担っており、hook 側の allow は密度の定義を二重化する
 # だけの死荷重になるため。
 
-# [NOTE]: init-agent 対象
+# [NOTE]: bootstrap 対象
 # claude code: if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ]; then
 # codex: if [ "$TOOL" = "apply_patch" ]; then
 if 
@@ -31,7 +31,7 @@ if
 
     # ロジックファイル(ts/js)のみ対象。tsx/jsx は意図的な除外 — コンポーネントのテストは
     # モックや {} での辻褄合わせに堕ちやすく強制する価値が薄いため、テストを門前払いの
-    # 条件にしない(書きたければ tdd-run に任意で乗せられる)。.md .json .sh 等も対象外
+    # 条件にしない(書きたければ tdd に任意で乗せられる)。.md .json .sh 等も対象外
     case "$EXT" in
       ts|js) ;;
       *) continue ;;
@@ -39,7 +39,7 @@ if
 
     TEST_FILE="$DIR/$BASE.test.$EXT"
     [ -f "$TEST_FILE" ] || \
-      hook_deny "テストファイル($TEST_FILE)が無い状態でのコード実装は禁止です。直接実装せず、tdd-run スキルの TDD フロー（シナリオ → Red → Green → Refactor）に乗せてください。"
+      hook_deny "テストファイル($TEST_FILE)が無い状態でのコード実装は禁止です。直接実装せず、tdd スキルの TDD フロー（シナリオ → Red → Green → Refactor）に乗せてください。"
   done < <(hook_file_paths)
 
   # 対応テストがあるコード本体 = 棄権して settings の permission 層に委ねる。

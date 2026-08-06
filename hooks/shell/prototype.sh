@@ -5,7 +5,7 @@
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 
-# codex では skill-session marker（$prototype 起動時に skill-session.sh が記録）が
+# codex では session marker（$prototype 起動時に session.sh が記録）が
 # 現セッションを指す時だけ執行する。claude は prototype の frontmatter hooks が起動を絞る
 if [ "$HOOK_AGENT" = "codex" ] && ! hook_skill_session_active "prototype"; then
   exit 0
@@ -14,7 +14,7 @@ fi
 while IFS= read -r FILE; do
   [ -z "$FILE" ] && continue
   echo "$FILE" | grep -q '\.test\.' && \
-    hook_deny "prototype 中はテストファイルを作成できません。動作確認は実行で行い、テストは OK 後（tdd-run 等）で書いてください。"
+    hook_deny "prototype 中はテストファイルを作成できません。動作確認は実行で行い、テストは OK 後（tdd 等）で書いてください。"
 done < <(hook_file_paths)
 
 # それ以外は棄権して settings に委ねる（hook が allow を配ると密度の定義が二重化する）

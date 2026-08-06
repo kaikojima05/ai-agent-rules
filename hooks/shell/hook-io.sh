@@ -9,7 +9,7 @@
 #         source 時点で stdin を読み切り HOOK_INPUT へ保持する。
 # 決定 hook の共通契約: stdout には決定 JSON 以外を出さない。stderr は各 hook が冒頭の
 #         exec 2>/dev/null で捨てる（jq 等サブプロセスのエラー文字混入を断つ）。
-# エージェント名 placeholder は配置後に init-agent が確定させる。
+# エージェント名 placeholder は配置後に bootstrap が確定させる。
 
 HOOK_AGENT="[agent_name]"
 
@@ -22,7 +22,7 @@ HOOK_INPUT=$(cat)
 # よって PreToolUse では deny 決定 JSON を直接書き出して確実に止める。
 # jq 不在時も出せるよう printf で組む（理由文は自前のリテラルのみでエスケープ不要）。
 # 各 hook は冒頭で stderr を捨てるため、原因はこの理由文でしかエージェントに届かない。
-# PreToolUse 以外（skill-session.sh の UserPromptSubmit / SessionEnd）で同じ JSON を
+# PreToolUse 以外（session.sh の UserPromptSubmit / SessionEnd）で同じ JSON を
 # 出すと、exit 0 の stdout がプロンプトへの追加コンテキストとして注入されるので棄権する。
 # 棄権しても、marker 生成の失敗で緩む require-test.sh 自身が PreToolUse 側で deny
 # されるため fail-open にはならない。
@@ -44,11 +44,11 @@ case "$HOOK_AGENT" in
   claude|codex) ;;
   *)
     # placeholder 未解決 = 未初期化。ここで一律 deny すると placeholder を解決する
-    # init-agent 自身の起動まで止まって詰むため、その 1 コマンドだけ通す
+    # bootstrap 自身の起動まで止まって詰むため、その 1 コマンドだけ通す
     case "$HOOK_INPUT" in
-      *init-agent.sh*) exit 0 ;;
+      *bootstrap/init-agent.sh*) exit 0 ;;
     esac
-    hook_io_fatal "エージェント種別が未確定です（hook-io.sh の HOOK_AGENT が placeholder のまま）。init-agent スキルを実行して配置を初期化してください。"
+    hook_io_fatal "エージェント種別が未確定です（hook-io.sh の HOOK_AGENT が placeholder のまま）。bootstrap スキルを実行して配置を初期化してください。"
     ;;
 esac
 
@@ -93,10 +93,10 @@ hook_prompt() { echo "$HOOK_INPUT" | jq -r '.prompt // empty'; }
 # hook イベント名（PreToolUse / UserPromptSubmit / SessionEnd 等）を返す関数
 hook_event_name() { echo "$HOOK_INPUT" | jq -r '.hook_event_name // empty'; }
 
-# skill-session marker のパスを返す関数（codex の skill スコープ再現に使う）。
+# session marker のパスを返す関数（codex の skill スコープ再現に使う）。
 # セッション別のファイル名にして、並行セッション同士の上書き競合を構造的に無くす。
 # 残留 marker は別 session_id のファイルなので無害（SessionEnd の掃除でも消える）
-hook_skill_session_file() { echo "$(hook_cwd)/.codex/tmp/skill-session.$1.$(hook_session_id)"; }
+hook_skill_session_file() { echo "$(hook_cwd)/.codex/tmp/session.$1.$(hook_session_id)"; }
 
 # 指定スキルの marker が現在のセッションに存在するか判定する関数
 hook_skill_session_active() { [ -f "$(hook_skill_session_file "$1")" ]; }

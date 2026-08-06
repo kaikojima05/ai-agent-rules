@@ -7,7 +7,7 @@
 エージェントごとに設定ファイルや配置ディレクトリ（`.claude/`, `.codex/` …）が分かれていても、開発上守らせたいルールは同じであることが多い。本リポジトリは次の点を狙う。
 
 - **規約の一元管理**: コーディング規約やパターン集を `AGENTS.md` と `rules/` に集約し、どのエージェントから参照しても同じ振る舞いになるようにする。
-- **エージェント間の差分を placeholder で吸収**: テンプレートでは `[agent_name]`（エージェント名）と `[skills_root]`（skills 配置先）を使って書いておき、`init-agent` スキルで対象エージェントに合わせて実体化する。hook の入出力スキーマ差分は `hooks/shell/hook-io.sh` が吸収する。
+- **エージェント間の差分を placeholder で吸収**: テンプレートでは `[agent_name]`（エージェント名）と `[skills_root]`（skills 配置先）を使って書いておき、`bootstrap` スキルで対象エージェントに合わせて実体化する。hook の入出力スキーマ差分は `hooks/shell/hook-io.sh` が吸収する。
 - **必要な統制をフックで強制**: 編集系ツール呼び出しの前にテストの存在を要求するなど、人間側の運用に頼らない仕組みを置く。
 
 ## 構成
@@ -18,26 +18,26 @@ ai-agent-rules/
 ├── rules/              # AGENTS.md から分離したパターン別の規約
 │   └── typescript/         # TypeScript プロジェクト固有のルール
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
-│   ├── init-agent/         # placeholder（[agent_name] / [skills_root]）と [NOTE] の解決
+│   ├── bootstrap/          # placeholder（[agent_name] / [skills_root]）と [NOTE] の解決
 │   ├── meeting/            # 要件監査・設計作成・単純化を統括するユーザー向け入口
 │   ├── preflight/          # 要件の由来・既存経路・境界ゼロ案を設計前に調査
 │   ├── cowlick/            # 機能ごとの未承認設計ドラフトを作成
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
-│   ├── run-agent/          # 設計書1枚を選び、DeepSeek実装を統括して停止
-│   ├── tdd-run/            # シナリオ承認後、テスト・委任実装・レビューを連続実行
+│   ├── conductor/          # 設計書1枚を選び、DeepSeek実装を統括して停止
+│   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
 │   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
-│   ├── rebase-squash/      # 1 ファイル = 1 コミット履歴を機能単位に squash
-│   ├── rule-audit/         # 差分と規約の突き合わせ
+│   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
+│   ├── audit/              # 差分と規約の突き合わせ
 │   ├── interview/          # 設計意図の深掘り対話
-│   ├── clean-code/         # フォーマッタ・リンターの一括適用
-│   ├── nesting-review/     # 深い制御フローネストを構造的に縮退
+│   ├── polish/             # フォーマッタ・リンターの一括適用
+│   ├── unwind/             # 深い制御フローネストを構造的に縮退
 │   ├── context-save/       # 知見の登録（context-dictionary API）
 │   ├── context-search/     # 知見の検索
 │   ├── context-update/     # 知見の更新
 │   └── e2e/                # chrome-devtools-mcp による E2E テスト
 ├── hooks/
 │   └── shell/              # PreToolUse hook 本体（hook-io.sh がスキーマ差分を吸収）
-├── prompt/             # 実装順 index（.prompt.md）と設計書の配置先シード（cowlick / run-agent が使用）
+├── prompt/             # 実装順 index（.prompt.md）と設計書の配置先シード（cowlick / conductor が使用）
 ├── e2e/                # .e2e.md の配置先シード（e2e スキルが使用）
 ├── claude/             # Claude Code 用の設定（settings.json, CLAUDE.md 等）
 ├── codex/              # Codex 用の設定（config.toml, hooks.json, rules/）
@@ -66,8 +66,8 @@ Codex 0.138.0 以上を前提とする。次の対応を崩さずに配置する
 配置後は次の順序で有効化する。
 
 1. Codex の対話セッションを対象リポジトリで開き、project を trusted にする。未信頼では project-local の config / hooks / rules がすべて無視される。
-2. `$init-agent codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）と `[NOTE]: init-agent 対象` を解決する。配布rulesは正確な init-agent コマンドだけをsandbox外でallowする。
-3. `/hooks` を開き、**init-agent 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
+2. `$bootstrap codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）と `[NOTE]: bootstrap 対象` を解決する。配布rulesは正確な bootstrap コマンドだけをsandbox外でallowする。
+3. `/hooks` を開き、**bootstrap 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
 4. Codexを再起動し、config / rules / hooks / skillsを新しいセッションで読み直す。
 
 ### Claude Code への配置
@@ -88,23 +88,23 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 | `e2e/` | `<repo>/.claude/e2e/` |
 | `skills/` | `<repo>/.claude/skills/` |
 
-配置後に project を trust し、`.mcp.json` の Serena を承認してから `/init-agent claude` を実行する。
+配置後に project を trust し、`.mcp.json` の Serena を承認してから `/bootstrap claude` を実行する。
 
 対象エージェントに応じた呼び出し形式:
 
 ```
 # claude
-/init-agent claude
+/bootstrap claude
 
 # codex
-$init-agent codex
+$bootstrap codex
 ```
 
 設計作成では `meeting` だけをユーザー向け入口として呼び出す。エージェントが `preflight → cowlick draft → ponytail → cowlick apply` を必要に応じて再実行し、ユーザーにはコードベースから判定できない設計判断だけを一度に一つ確認する。`ponytail` は設計書ごとの成立確認ではなく、全設計書のruntime topologyを平坦化し、境界を新設しない代替案との比較と要件への対応付けが完了するまで設計をreadyにしない。
 
 ### DeepSeekへの調査・実装委任
 
-`preflight`、`cowlick`、`ponytail`、`run-agent`は、コードベースの探索をDeepSeekなどの下位モデルへ委任する。上位モデルは調査項目の設計、重要根拠の再確認、要件と設計の判断、テスト、レビュー、Gitを担当し、下位モデルには読み取り調査または許可された本体コードの編集だけを委任する。固定実行器を使う場合はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+`preflight`、`cowlick`、`ponytail`、`conductor`は、コードベースの探索をDeepSeekなどの下位モデルへ委任する。上位モデルは調査項目の設計、重要根拠の再確認、要件と設計の判断、テスト、レビュー、Gitを担当し、下位モデルには読み取り調査または許可された本体コードの編集だけを委任する。固定実行器を使う場合はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
@@ -114,7 +114,7 @@ export OPENROUTER_API_KEY="..."
 
 API keyには40 USD以下の月次またはリセットなしhard limitを設定する。固定実行器は使用量38 USDで新規実行を止め、各リクエストでもZDRと学習利用拒否を強制する。キーはリポジトリへ保存しない。
 
-疎通確認は`bash [skills_root]/run-agent/delegate-deepseek.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
+疎通確認は`bash [skills_root]/conductor/delegate-deepseek.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
 
 通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellをDeepSeekへ許可しない。
 
@@ -122,7 +122,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 ## 注意
 
-- 本リポジトリはテンプレートなので、`init-agent` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
+- 本リポジトリはテンプレートなので、`bootstrap` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - placeholder の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れ検証は `init-agent.sh` 内で完結させる。
 - Claude Code は `AGENTS.md` を自動読み込みしない（`CLAUDE.md` のみ）。そのため `claude/CLAUDE.md`（中身は `@AGENTS.md`）を配置時にプロジェクトルートへ展開して読ませる。codex は `AGENTS.md` を直読みするため不要。
 - Codex は `distributed` permission profile で通常の workspace 書き込みを許可し、`.git` / `.codex` / `.agents` を保護する。レビュー対象パスは、配布rulesが毎回確認する承認コマンドと1回限りのhook tokenで保護する。設定更新は限定allowした固定スクリプトだけを使い、汎用の `cp` / `sed` に例外を与えない。
@@ -141,8 +141,8 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | shellで作成・上書き・metadata変更する（`cp` `mkdir` `chmod` `sed -i` 等） | 🙋 確認 |
 | ファイルを消す（`rm`等） | 🙋 確認 |
 | localhost を含むサーバーへ HTTP request を送る | 🙋 sandbox 外で確認 |
-| `commit-message-contract.sh` が生成・検証する契約に従うコミット | ✅ 自動 |
-| `tdd-run` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
+| `commit-subject.sh` が生成・検証する契約に従うコミット | ✅ 自動 |
+| `tdd` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
 | pipeline・loop・条件分岐・subshell・inline shellへ複数commandを集約する | 🚫 禁止 |
 | `find -delete/-exec`、`sort -o`、`rg --pre`など読み取りcommandの危険option | 🚫 禁止 |
 | `.env` / lockfile / `.git/` / エージェント設定を直接書き換える | 🚫 禁止 |
@@ -155,7 +155,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 |---|---|---|
 | localhost を含むHTTP request | sandbox外承認 | permission profileのnetwork無効化によりsandbox外承認 |
 | `package.json` / CI / migration 等のpath単位確認 | settingsのaskで強制 | rulesのpromptで1回限りの変更tokenを発行 |
-| 既存ファイルの全面Write | `guard-overwrite.sh`でask | `apply_patch`は部分差分。opaque shellはrulesでprompt |
+| 既存ファイルの全面Write | `overwrite.sh`でask | `apply_patch`は部分差分。opaque shellはrulesでprompt |
 | 設定・skillの更新 | sandbox除外済み固定スクリプト | rulesでallowした固定スクリプト |
 | MCPの未登録tool | Claudeの既定確認 | `default_tools_approval_mode = "prompt"` |
 
@@ -165,14 +165,14 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 - Codex のpermission profile / network / MCP承認 / hook有効化 → `codex/config.toml`
 - Codex のコマンド単位の許可 / 確認 / 禁止 → `codex/rules/default.rules`
 - Codex のhookイベントと実行timeout → `codex/hooks.json`
-- 単一読み取りcommand、`/dev/null`例外、複合shell・危険optionの拒否 → `hooks/shell/normalize-readonly-search.sh`
-- テストの有無でコード書き込みを判定（`tdd-run` 稼働中のみ deny） → `hooks/shell/require-test.sh`（claude: tdd-run の frontmatter hooks で起動 / codex: 常時配線 + `skill-session.sh` の marker で tdd-run 稼働中のみ執行）
-- 復元できない全上書きだけ確認に通す（Claude Code） → `hooks/shell/guard-overwrite.sh`
-- `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-agent-config.sh`
+- 単一読み取りcommand、`/dev/null`例外、複合shell・危険optionの拒否 → `hooks/shell/readonly-search.sh`
+- テストの有無でコード書き込みを判定（`tdd` 稼働中のみ deny） → `hooks/shell/require-test.sh`（claude: tdd の frontmatter hooks で起動 / codex: 常時配線 + `session.sh` の marker で tdd 稼働中のみ執行）
+- 復元できない全上書きだけ確認に通す（Claude Code） → `hooks/shell/overwrite.sh`
+- `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-config.sh`
 - 機密ファイル（`.env` / `.env.*`）の書き込み・削除の封じ込め → `hooks/shell/protect-env.sh`（sandbox / permission profile との二重層）
-- lockfile の編集ツール・Bash直接変更を拒否 → `hooks/shell/protect-lockfiles.sh`（permission設定との二重層）
-- レビュー対象ファイルの未承認変更を拒否し、Codexではpath単位の1回限り承認を消費 → `hooks/shell/protect-review-files.sh`
-- コミット契約（stage厳密1件・対象ファイル名一致・日本語・AI署名禁止）の執行 → `hooks/shell/enforce-agent-commit.sh`
+- lockfile の編集ツール・Bash直接変更を拒否 → `hooks/shell/protect-locks.sh`（permission設定との二重層）
+- レビュー対象ファイルの未承認変更を拒否し、Codexではpath単位の1回限り承認を消費 → `hooks/shell/protect-review.sh`
+- コミット契約（stage厳密1件・対象ファイル名一致・日本語・AI署名禁止）の執行 → `hooks/shell/commit-gate.sh`
 
 ## テスト
 
@@ -182,8 +182,8 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 bash tests/verify-all.sh
 ```
 
-- `tests/verify-all.sh` — 統合スイート。一時ディレクトリに claude / codex の配置を再現し、`init-agent` の placeholder 置換・`[NOTE]` 解決を実行したうえで全 hook を検証する。最後に `PASS=n FAIL=0` を出す
+- `tests/verify-all.sh` — 統合スイート。一時ディレクトリに claude / codex の配置を再現し、`bootstrap` の placeholder 置換・`[NOTE]` 解決を実行したうえで全 hook を検証する。最後に `PASS=n FAIL=0` を出す
 - `tests/run-tests.sh` — hook 全数の deny / ask / 棄権テスト（`verify-all.sh` から呼ばれる。単体では動かない）
-- 検証範囲: 構文 / 実行ビット / 配置シミュレーション（claude・codex）/ 権限パスマトリクス / MCP version・tool承認 / Codex config strict読込 / execpolicy判定 / commit契約 / hook参照先・timeout / placeholder置換漏れ / hook決定JSON / `skill-session`の発火スコープ / 固定宛先スクリプト / `rebase-squash` E2E
+- 検証範囲: 構文 / 実行ビット / 配置シミュレーション（claude・codex）/ 権限パスマトリクス / MCP version・tool承認 / Codex config strict読込 / execpolicy判定 / commit契約 / hook参照先・timeout / placeholder置換漏れ / hook決定JSON / `session`の発火スコープ / 固定宛先スクリプト / `rebase` E2E
 - 前提: `jq` と `git`。Codex CLI があれば 0.138.0 以上であることと config / rules の実機検査を行い、無い環境ではその部分だけskipする
 - 作業ファイルは一時ディレクトリに作られ、終了時に削除される。`tests/` 自体は配布対象外

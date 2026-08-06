@@ -4,7 +4,7 @@
 # distributed permission profile が保護する .codex / .agents へ書けるのは、宛先と処理を固定した
 # レビュー済みスクリプトだけ。汎用の shell / cp / sed には例外を与えない。
 prefix_rule(
-    pattern = ["bash", ".agents/skills/init-agent/init-agent.sh", "codex"],
+    pattern = ["bash", ".agents/skills/bootstrap/init-agent.sh", "codex"],
     decision = "allow",
     justification = "配置済みCodex設定のplaceholderを決定的スクリプトで解決します。",
 )
@@ -14,29 +14,29 @@ prefix_rule(
     justification = "確認済みドラフトをdraft-prompt/から固定の.codex/prompt/へ移します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/run-agent/mark-prompt-done.sh"],
+    pattern = ["bash", ".agents/skills/conductor/mark-prompt-done.sh"],
     decision = "allow",
     justification = "実装済みの設計書を固定の.codex/prompt/.prompt.md上で[x]に倒します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/clean-code/quality-gate.sh"],
+    pattern = ["bash", ".agents/skills/polish/quality-gate.sh"],
     decision = "allow",
-    justification = "clean-code完了時の現在HEADと作業ツリー状態だけを一時receiptへ記録・検証します。",
+    justification = "polish完了時の現在HEADと作業ツリー状態だけを一時receiptへ記録・検証します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/run-agent/delegate-deepseek.sh"],
+    pattern = ["bash", ".agents/skills/conductor/delegate-deepseek.sh"],
     decision = "allow",
     justification = "予算・ZDR・編集先を固定検証してDeepSeekを隔離worktreeで実行します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/run-agent/delegate-deepseek.sh", "smoke"],
+    pattern = ["bash", ".agents/skills/conductor/delegate-deepseek.sh", "smoke"],
     decision = "prompt",
     justification = "従量課金の下位モデルへhelloを送るsmoke testを実行するか確認します。",
     match = [
-        "bash .agents/skills/run-agent/delegate-deepseek.sh smoke",
+        "bash .agents/skills/conductor/delegate-deepseek.sh smoke",
     ],
     not_match = [
-        "bash .agents/skills/run-agent/delegate-deepseek.sh research task-id spec.md",
+        "bash .agents/skills/conductor/delegate-deepseek.sh research task-id spec.md",
     ],
 )
 prefix_rule(
@@ -50,14 +50,14 @@ prefix_rule(
     justification = "明示的なrebase呼び出しで、未push履歴だけを固定スクリプトで二重検証して整理します。",
 )
 prefix_rule(
-    pattern = ["bash", ".codex/hooks/shell/protect-review-files.sh", "approve"],
+    pattern = ["bash", ".codex/hooks/shell/protect-review.sh", "approve"],
     decision = "prompt",
     justification = "レビュー対象ファイルへの次の1回の変更を許可するか確認します。",
     match = [
-        "bash .codex/hooks/shell/protect-review-files.sh approve front/prisma/schema.prisma",
+        "bash .codex/hooks/shell/protect-review.sh approve front/prisma/schema.prisma",
     ],
     not_match = [
-        "bash .codex/hooks/shell/protect-review-files.sh front/prisma/schema.prisma",
+        "bash .codex/hooks/shell/protect-review.sh front/prisma/schema.prisma",
     ],
 )
 
