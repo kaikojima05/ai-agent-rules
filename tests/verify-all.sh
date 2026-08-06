@@ -111,6 +111,7 @@ grep -q -- '--arg model_id "$MODEL_ID"' "$DS" && ! grep -q 'MODEL_ID="$MODEL_ID"
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
 grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny"' "$DS" && ok "DeepSeek smoke: hello固定・tool全拒否" || ng "DeepSeek smokeのpromptまたは権限が不正"
+grep -q '^  nesting)' "$DS" && grep -q '修正案・コード変更は不要です' "$DS" && grep -q 'nesting path must be tracked' "$DS" && ok "DeepSeek nesting: 本体コードだけを読み取り検出" || ng "DeepSeek nesting検出モードが不正"
 
 INIT_AGENT_SKILL="$REPO/skills/init-agent/SKILL.md"
 if grep -q '^allowed-tools: Bash$' "$INIT_AGENT_SKILL" && grep -q '最初のツール呼び出しで Step 3' "$INIT_AGENT_SKILL"; then
@@ -171,6 +172,7 @@ MARK_PROMPT_DONE_SCRIPT="$REPO/skills/run-agent/mark-prompt-done.sh"
 [ -f "$NESTING_REVIEW_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/nesting-review" >/dev/null && ok "nesting-review スキルが有効" || ng "nesting-review スキルが無効"
 grep -Fq 'Skill(nesting-review)' "$CLEAN_CODE_SKILL" && grep -q '必ず呼ぶ' "$CLEAN_CODE_SKILL" && ok "clean-code はnesting-reviewを必須化" || ng "clean-code のnesting-review連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$NESTING_REVIEW_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$NESTING_REVIEW_SKILL" && ok "nesting-review は見せかけの関数抽出を禁止" || ng "nesting-review の関数抽出禁止が無い"
+grep -Fq 'delegate-deepseek.sh nesting' "$NESTING_REVIEW_SKILL" && grep -q '自力検出へ切り替えず' "$NESTING_REVIEW_SKILL" && grep -q 'DeepSeek が検出した' "$CLEAN_CODE_SKILL" && ok "nesting-review は検出をDeepSeekへ専任" || ng "nesting-review の検出責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$CLEAN_CODE_SKILL" && ok "clean-code の品質receipt記録器が有効" || ng "clean-code の品質receipt記録器が無い"
 grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$RUN_AGENT_SKILL" && ok "run-agent の完了更新は品質receiptを検証" || ng "run-agent の品質receipt検証が無い"
 if grep -Fq 'Skill(clean-code)' "$RUN_AGENT_SKILL" && \
@@ -288,6 +290,21 @@ if [ -f "$EMPTY_RESULT" ] && [ "$(jq -c '.changed_paths' "$EMPTY_RESULT")" = "[]
   ok "delegate-deepseek: 変更ゼロを空配列で記録"
 else
   ng "delegate-deepseek: 変更ゼロのresult.jsonが不正"
+fi
+mkdir -p src
+printf 'export const subject = true\n' > src/subject.ts
+git add src/subject.ts
+git commit -qm "test: nesting対象"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" nesting nesting-check src/subject.ts > delegate-nesting.out 2>&1; then
+  ok "delegate-deepseek: nestingは追跡済み本体コードを読み取り検出"
+else
+  ng "delegate-deepseek: nestingが失敗"; cat delegate-nesting.out
+fi
+NESTING_RESULT="$DELEGATE_REPO/.claude/tmp/deepseek/nesting-check/result.json"
+if [ -f "$NESTING_RESULT" ] && [ "$(jq -r '.mode' "$NESTING_RESULT")" = "nesting" ] && [ "$(jq -c '.changed_paths' "$NESTING_RESULT")" = "[]" ]; then
+  ok "delegate-deepseek: nesting結果を変更なしで保存"
+else
+  ng "delegate-deepseek: nestingのresult.jsonが不正"
 fi
 printf '#!/bin/bash\ntouch protected-change.txt\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
