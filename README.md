@@ -140,7 +140,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | shellで作成・上書き・metadata変更する（`cp` `mkdir` `chmod` `sed -i` 等） | 🙋 確認 |
 | ファイルを消す（`rm`等） | 🙋 確認 |
 | localhost を含むサーバーへ HTTP request を送る | 🙋 sandbox 外で確認 |
-| 契約に従うコミット（stage 1件・対象名一致・日本語の変更内容） | ✅ 自動 |
+| `commit-message-contract.sh` が生成・検証する契約に従うコミット | ✅ 自動 |
 | `tdd-run` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
 | pipeline・loop・条件分岐・subshell・inline shellへ複数commandを集約する | 🚫 禁止 |
 | `find -delete/-exec`、`sort -o`、`rg --pre`など読み取りcommandの危険option | 🚫 禁止 |
