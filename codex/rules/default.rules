@@ -28,6 +28,14 @@ prefix_rule(
     decision = "allow",
     justification = "予算・ZDR・編集先を固定検証してDeepSeekを隔離worktreeで実行します。",
 )
+
+# delegate.sh が長時間実行になった場合の完了確認。ps -p は指定PIDの状態を読むだけで
+# filesystemやprocessへ変更を加えないため、動的PIDでも追加承認を不要にする。
+prefix_rule(
+    pattern = ["ps", "-p"],
+    decision = "allow",
+    justification = "DeepSeek委任processの完了状態を読み取り専用で確認します。",
+)
 prefix_rule(
     pattern = ["bash", ".agents/skills/deepseek/delegate.sh", "smoke"],
     decision = "prompt",

@@ -135,6 +135,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | やろうとすること | どうなる |
 |---|---|
 | 単一commandでファイルを読む・探す（`ls` `cat` `rg` `find -print` `nl` `sort`） | ✅ 自動 |
+| 委任processの完了状態を確認する（`ps -p <PID> ...`） | ✅ 自動 |
 | 検証済み読み取りcommandの出力を`/dev/null`へ捨てる | ✅ 自動 |
 | 通常ファイルを書き換える（コード・テスト・ドキュメント） | ✅ 自動 |
 | `package.json` / CI / migration / Prisma / Docker / Terraform を書き換える | 🙋 確認 |
