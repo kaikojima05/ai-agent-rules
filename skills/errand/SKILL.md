@@ -26,7 +26,7 @@ disable-model-invocation: true
 2. 既存の実装挙動を調査する必要がある場合は、上位モデルが Read / Grep / Glob / 検索コマンドで調べず、DeepSeek の survey mode を先に実行する。
 
    ~~~bash
-   bash [skills_root]/conductor/delegate-deepseek.sh survey <task-id> <調査指示>
+   bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>
    ~~~
 
    結果ディレクトリの result.json、opencode.jsonl、candidate.patch を読み、根拠と未確認事項だけを受け取る。DeepSeek が失敗・中断・根拠不足なら上位モデルが自力調査へ切り替えず停止する。
@@ -34,7 +34,7 @@ disable-model-invocation: true
 4. 固定実行器へ実装を委任する。
 
    ~~~bash
-   bash [skills_root]/conductor/delegate-deepseek.sh errand <task-id> <短い実装指示> -- <許可する本体コード>
+   bash [skills_root]/deepseek/delegate.sh errand <task-id> <短い実装指示> -- <許可する本体コード>
    ~~~
 
    DeepSeek にテスト、設定、Git、設計資産を変更させない。task-id は lowercase kebab-case とし、同じ task-id を再利用しない。
