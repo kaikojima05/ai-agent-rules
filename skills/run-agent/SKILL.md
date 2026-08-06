@@ -69,10 +69,15 @@ DeepSeekはテストの穴を[agent_name]へ相談できるが、テスト・設
 
 - `clean-code` が変更した場合は、対象テスト・型検査・lint・レビューをやり直し、追跡対象の変更をコミットしてから次へ進む
 - 品質ゲートが残した候補や根拠は、`clean-code` の結果として受け取り、未解決のまま完了扱いにしない
+- `clean-code` が完了後に返す機能名で、品質ゲートの receipt を記録する。記録できなければ次へ進まない
+
+```bash
+bash [skills_root]/clean-code/quality-gate.sh record <機能名>
+```
 
 ### 6. indexを完了へ変更する
 
-すべて満たした後だけ固定スクリプトを実行する。
+すべて満たし、同じ機能名・現在の HEAD の `clean-code` receipt が記録済みの場合だけ固定スクリプトを実行する。スクリプト自身も receipt を再検証するため、記録のない状態で `[x]` へ進めない。
 
 ```bash
 bash [skills_root]/run-agent/mark-prompt-done.sh <機能名>
