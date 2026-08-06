@@ -162,6 +162,21 @@ for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
 done
 report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 
+echo "== run-agent の最終品質ゲート =="
+CLEAN_CODE_SKILL="$REPO/skills/clean-code/SKILL.md"
+NESTING_REVIEW_SKILL="$REPO/skills/nesting-review/SKILL.md"
+RUN_AGENT_SKILL="$REPO/skills/run-agent/SKILL.md"
+[ -f "$NESTING_REVIEW_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/nesting-review" >/dev/null && ok "nesting-review スキルが有効" || ng "nesting-review スキルが無効"
+grep -Fq 'Skill(nesting-review)' "$CLEAN_CODE_SKILL" && grep -q '必ず呼ぶ' "$CLEAN_CODE_SKILL" && ok "clean-code はnesting-reviewを必須化" || ng "clean-code のnesting-review連携が無い"
+grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$NESTING_REVIEW_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$NESTING_REVIEW_SKILL" && ok "nesting-review は見せかけの関数抽出を禁止" || ng "nesting-review の関数抽出禁止が無い"
+if grep -Fq 'Skill(clean-code)' "$RUN_AGENT_SKILL" && \
+   grep -q 'index更新と最終報告の前に `clean-code` を自動で実行する' "$RUN_AGENT_SKILL" && \
+   [ "$(grep -n 'index更新と最終報告の前に `clean-code` を自動で実行する' "$RUN_AGENT_SKILL" | cut -d: -f1)" -lt "$(grep -n '^### 6\. indexを完了へ変更する' "$RUN_AGENT_SKILL" | cut -d: -f1)" ]; then
+  ok "run-agent はindex更新・最終報告前にclean-codeを強制"
+else
+  ng "run-agent のclean-code最終ゲートが不正"
+fi
+
 echo "== 2. claude 配置シミュレーション =="
 mkdir -p "$S/claude-sim/.claude"
 cp "$REPO/AGENTS.md" "$S/claude-sim/"
