@@ -23,9 +23,6 @@ set -u
 err() { echo "ERROR: $*" >&2; }
 die() { err "$*"; exit 1; }
 
-# コミット契約のタグ（メッセージ先頭の「[<タグ>]: 」）。配置時に init-agent が確定させる
-AGENT_TAG="[agent_name]"
-
 MODE="" PLAN="" BASE_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -40,6 +37,13 @@ done
 command -v jq >/dev/null 2>&1 || die "jq が必要"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ内で実行すること"
 [ "$(git rev-parse --abbrev-ref HEAD)" != "HEAD" ] || die "detached HEAD では実行しない"
+
+# 通常コミット hook と同じ配置済み契約を読む。subject の規則をこの実行器に複製しない。
+REPO_ROOT=$(git rev-parse --show-toplevel)
+COMMIT_MESSAGE_CONTRACT="$REPO_ROOT/.[agent_name]/hooks/shell/commit-message-contract.sh"
+[ -r "$COMMIT_MESSAGE_CONTRACT" ] || die "コミットsubject契約が無い: $COMMIT_MESSAGE_CONTRACT"
+. "$COMMIT_MESSAGE_CONTRACT"
+AGENT_TAG="$COMMIT_MESSAGE_AGENT"
 
 # clean tree 前提（untracked は無害なので許容）
 git status --porcelain | grep -qv '^??' && \
@@ -103,12 +107,12 @@ PLAN_BASE=$(jq -r '.base // empty' "$PLAN")
 NGROUPS=$(jq '.groups | length' "$PLAN")
 [ "$NGROUPS" -ge 1 ] || die "plan の groups が空"
 
-# 契約検証をスクリプトに内蔵する: enforce-agent-commit.sh はスクリプト内部の commit を
-# 見られない(コマンド文字列検査のため)ので、同じ契約を同じ regex でここでも検査する
+# 契約検証は共有実装で行う。通常コミット hook はスクリプト内部の commit を
+# 見られない(コマンド文字列検査のため)が、subject 規則は同じままにする。
 while IFS= read -r subj; do
-  echo "$subj" | grep -qE "^\[${AGENT_TAG}\]: [^[:space:]/]+(/[^[:space:]/]+)*/.+" || \
-    die "subject が「[${AGENT_TAG}]: {機能}/{変更内容}」形式でない: $subj"
-  echo "$subj" | grep -qiE 'co-authored-by|generated with' && \
+  commit_message_subject_is_valid "$subj" || \
+    die "subject が契約形式でない: $subj (期待: $(commit_message_format))"
+  commit_message_has_forbidden_ai_signature "$subj" && \
     die "subject に AI 署名が含まれる: $subj"
 done < <(jq -r '.groups[].subject' "$PLAN")
 
