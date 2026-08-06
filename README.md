@@ -133,13 +133,17 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 | やろうとすること | どうなる |
 |---|---|
-| ファイルを読む・探す（`ls` `cat` `grep`） | ✅ 自動 |
+| 単一commandでファイルを読む・探す（`ls` `cat` `rg` `find -print` `nl` `sort`） | ✅ 自動 |
+| 検証済み読み取りcommandの出力を`/dev/null`へ捨てる | ✅ 自動 |
 | 通常ファイルを書き換える（コード・テスト・ドキュメント） | ✅ 自動 |
 | `package.json` / CI / migration / Prisma / Docker / Terraform を書き換える | 🙋 確認 |
-| ファイルを消す（`rm`）・シェルで上書きする（`sed -i` 等） | 🙋 確認 |
+| shellで作成・上書き・metadata変更する（`cp` `mkdir` `chmod` `sed -i` 等） | 🙋 確認 |
+| ファイルを消す（`rm`等） | 🙋 確認 |
 | localhost を含むサーバーへ HTTP request を送る | 🙋 sandbox 外で確認 |
 | 契約に従うコミット（stage 1件・対象名一致・日本語の変更内容） | ✅ 自動 |
 | `tdd-run` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
+| pipeline・loop・条件分岐・subshell・inline shellへ複数commandを集約する | 🚫 禁止 |
+| `find -delete/-exec`、`sort -o`、`rg --pre`など読み取りcommandの危険option | 🚫 禁止 |
 | `.env` / lockfile / `.git/` / エージェント設定を直接書き換える | 🚫 禁止 |
 | 契約に反するコミット（複数stage・対象名不一致・日本語なし・AI署名・`--amend`） | 🚫 禁止 |
 | `git push` / `git cherry-pick`、依存の install / add | 🚫 禁止 |
@@ -160,6 +164,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 - Codex のpermission profile / network / MCP承認 / hook有効化 → `codex/config.toml`
 - Codex のコマンド単位の許可 / 確認 / 禁止 → `codex/rules/default.rules`
 - Codex のhookイベントと実行timeout → `codex/hooks.json`
+- 単一読み取りcommand、`/dev/null`例外、複合shell・危険optionの拒否 → `hooks/shell/normalize-readonly-search.sh`
 - テストの有無でコード書き込みを判定（`tdd-run` 稼働中のみ deny） → `hooks/shell/require-test.sh`（claude: tdd-run の frontmatter hooks で起動 / codex: 常時配線 + `skill-session.sh` の marker で tdd-run 稼働中のみ執行）
 - 復元できない全上書きだけ確認に通す（Claude Code） → `hooks/shell/guard-overwrite.sh`
 - `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-agent-config.sh`
