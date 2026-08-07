@@ -178,6 +178,7 @@ grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_
 grep -Fq 'errand <task-id> <短い実装指示> -- <許可する本体コードまたはschema.prisma>' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はDeepSeekの実装境界を固定" || ng "errand の実装境界が不正"
 grep -Fq '同型実装から配置・名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q 'new allowed path parent must exist' "$DS" && grep -q 'new allowed path must not be ignored' "$DS" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
 grep -Fq '未実装が前提である' "$ERRAND_SKILL" && grep -Fq '許可パスが複数あることだけを理由に停止してはならない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration commandを実行してはならない' "$ERRAND_SKILL" && grep -Fq '別のworkflow skillを自動追加しない' "$ERRAND_SKILL" && ok "errand は複数pathとPrisma schemaを許可しmigrationを禁止" || ng "errand の複数path・Prisma境界が不正"
+grep -Fq '初回実装は必ずDeepSeekの`candidate.patch`から始める' "$ERRAND_SKILL" && grep -Fq '上位モデルへ切り替えず' "$ERRAND_SKILL" && grep -Fq '修正をDeepSeekへ再委任しない' "$ERRAND_SKILL" && grep -Fq '初回実装候補を作成してください' "$DS" && ok "errand はDeepSeek初回実装・上位モデル修正へ固定" || ng "errand の初回実装・修正責務が不正"
 if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
   ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
 else
@@ -196,6 +197,7 @@ echo "== conductor の最終品質ゲート =="
 POLISH_SKILL="$REPO/skills/polish/SKILL.md"
 UNWIND_SKILL="$REPO/skills/unwind/SKILL.md"
 CONDUCTOR_SKILL="$REPO/skills/conductor/SKILL.md"
+TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 QUALITY_GATE_SCRIPT="$REPO/skills/polish/quality-gate.sh"
 MARK_PROMPT_DONE_SCRIPT="$REPO/skills/conductor/mark-prompt-done.sh"
 [ -f "$UNWIND_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/unwind" >/dev/null && ok "unwind スキルが有効" || ng "unwind スキルが無効"
@@ -204,6 +206,7 @@ grep -q '新しい関数・メソッド・helperへ切り出して直後に呼�
 grep -Fq 'deepseek/delegate.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && ok "unwind は検出をDeepSeekへ専任" || ng "unwind の検出責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$POLISH_SKILL" && ok "polish の品質receipt記録器が有効" || ng "polish の品質receipt記録器が無い"
 grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$CONDUCTOR_SKILL" && ok "conductor の完了更新は品質receiptを検証" || ng "conductor の品質receipt検証が無い"
+grep -Fq '旧`run-agent`の責務は現在の`conductor`が引き継いでいる' "$CONDUCTOR_SKILL" && grep -Fq '初回実装へ切り替えず' "$CONDUCTOR_SKILL" && grep -Fq 'DeepSeekへ再委任しない' "$CONDUCTOR_SKILL" && grep -Fq '許可された本体コードと`schema.prisma`の初回実装 | 禁止 | 可' "$TDD_SKILL" && grep -Fq 'DeepSeek候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "旧run-agentはDeepSeek初回実装・上位モデル修正へ固定" || ng "旧run-agentの初回実装・修正責務が不正"
 if grep -Fq 'Skill(polish)' "$CONDUCTOR_SKILL" && \
    grep -q 'index更新と最終報告の前に `polish` を自動で実行する' "$CONDUCTOR_SKILL" && \
    ! grep -q 'unwind' "$CONDUCTOR_SKILL" && \

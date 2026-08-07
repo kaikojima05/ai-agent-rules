@@ -472,13 +472,13 @@ elif [ "$MODE" = "nesting" ]; then
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 elif [ "$MODE" = "implement" ]; then
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
-  PROMPT="承認済み設計 .deepseek-request/spec.md に従い、次の本体コードだけを実装してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
+  PROMPT="承認済み設計 .deepseek-request/spec.md に従い、次の許可ファイルの初回実装候補を作成してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 else
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
-  PROMPT="次の短い実装指示に従い、許可された本体コードだけを実装してください。テスト、設定、Git、設計資産を変更させないでください。要件が曖昧、または許可外の変更が必要なら変更せず consultation_required として根拠を報告してください。実装指示:\n$DIRECT_INSTRUCTION\n許可ファイル:\n$ALLOWED_LIST"
+  PROMPT="次の短い実装指示に従い、許可ファイルの初回実装候補を作成してください。テスト、設定、Git、設計資産を変更させないでください。要件が曖昧、または許可外の変更が必要なら変更せず consultation_required として根拠を報告してください。実装指示:\n$DIRECT_INSTRUCTION\n許可ファイル:\n$ALLOWED_LIST"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"

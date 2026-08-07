@@ -24,7 +24,7 @@ ai-agent-rules/
 │   ├── cowlick/            # 機能ごとの未承認設計ドラフトを作成
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
 │   ├── deepseek/           # 調査・候補実装を隔離実行する共通基盤
-│   ├── conductor/          # 設計書1枚を選び、DeepSeek実装を統括して停止
+│   ├── conductor/          # 旧run-agent。設計書1枚のDeepSeek初回実装を統括して停止
 │   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
 │   ├── errand/             # 設計書なしの軽微な実装をDeepSeekへ限定委任
 │   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
@@ -104,7 +104,7 @@ $bootstrap codex
 
 ### DeepSeekへの調査・実装委任
 
-コードベースの事実確認は、まず共通のDeepSeek実行器へ委任する。調査は`bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>`で行う。surveyは依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。新規機能の類似例を全体から探す依頼では最後まで広げられる。通常は返却されたreportを採用して同じ範囲を重複調査しない。report内の矛盾、根拠不足、下位モデルの失敗、またはユーザーから異議がある場合だけ、上位モデルが独立して読み取り調査し、必要に応じて範囲を広げる。Read / Grep / Glob / 安全な単一検索コマンドは物理的に禁止せず、書き込みだけをsandboxと保護hookで制限する。DeepSeekには読み取り調査または許可された本体コードの候補パッチ作成だけを委任する。固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+コードベースの事実確認は、まず共通のDeepSeek実行器へ委任する。調査は`bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>`で行う。surveyは依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。新規機能の類似例を全体から探す依頼では最後まで広げられる。通常は返却されたreportを採用して同じ範囲を重複調査しない。report内の矛盾、根拠不足、下位モデルの失敗、またはユーザーから異議がある場合だけ、上位モデルが独立して読み取り調査し、必要に応じて範囲を広げる。Read / Grep / Glob / 安全な単一検索コマンドは物理的に禁止せず、書き込みだけをsandboxと保護hookで制限する。`errand`と旧`run-agent`である`conductor`では、依頼された本体コードと`schema.prisma`の初回実装を必ずDeepSeekの候補パッチから始める。候補を反映した後のテスト・レビュー・修正はCodexまたはClaudeが直接担当し、DeepSeekへ戻さない。DeepSeekの失敗・timeout・候補拒否を、上位モデルによる初回実装へ切り替える理由にはしない。固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 
 surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最終文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。再表示と候補patchの確認には`bash [skills_root]/deepseek/delegate.sh show <task-id>`を使える。
 

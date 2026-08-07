@@ -1,13 +1,20 @@
 ---
 name: errand
-description: "ユーザーが $errand を明示して、既存パターンの反復で一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加を、設計書なしでDeepSeekへ委任したいときだけ使う。複数ファイルを扱えるが、新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
+description: "ユーザーが $errand を明示して、既存パターンの反復で一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加の初回実装を、設計書なしでDeepSeekへ委任したいときだけ使う。DeepSeek候補の反映後はCodexまたはClaudeが修正する。複数ファイルを扱えるが、新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash
 disable-model-invocation: true
 ---
 
 ## 目的
 
-設計書を作る価値がないほど小さく、依頼と最寄りの既存パターンから変更内容・対象パス・完了条件を一意に確定できる実装だけを委任する。既存パターンから配置・内容が一意な定型ファイルとPrisma modelの追加を含める。上位モデルは要件の縮約、許可パスの決定、候補パッチの採否、検証、Gitを担当する。DeepSeekは隔離worktreeで許可パスの候補パッチだけを作る。
+設計書を作る価値がないほど小さく、依頼と最寄りの既存パターンから変更内容・対象パス・完了条件を一意に確定できる実装だけを委任する。既存パターンから配置・内容が一意な定型ファイルとPrisma modelの追加を含める。DeepSeekが依頼された変更の初回実装候補を作り、上位モデルは要件の縮約、許可パスの決定、候補パッチの採否、反映後の修正、検証、Gitを担当する。
+
+## 初回実装と修正の境界
+
+- 初回実装とは、このerrandで依頼された挙動について許可パスへ最初に加えるコード変更を指す。新規ファイルだけでなく既存ファイルへの機能追加も含む
+- 初回実装は必ずDeepSeekの`candidate.patch`から始める。上位モデルが先にstub、雛形、部分実装、手作業の代替実装を作ってはならない
+- DeepSeek候補を許可パスへ反映した後は、上位モデルがレビュー、テスト、型検査、lintの結果に基づいて本体コードを直接修正する。修正をDeepSeekへ再委任しない
+- 候補が未生成、timeout、失敗、またはパッチ全体を拒否した状態は初回実装済みではない。上位モデルへ切り替えず、新しいtask-idで再委任するか停止する
 
 ## 起動境界
 
@@ -44,8 +51,8 @@ disable-model-invocation: true
    ~~~
 
    DeepSeekにテスト、設定、migration、Git、設計資産を変更させない。task-idはlowercase kebab-caseとし、同じtask-idを再利用しない。
-5. command完了後に`bash [skills_root]/deepseek/delegate.sh show <task-id>`でresult metadata、report、candidate.patchを取得し、候補パッチを確認する。`status != 0`または`timed_out: true`ならcandidate.patchは診断専用として拒否する。許可パス外の変更、曖昧さの握り潰し、ハードコード、既存契約との不一致があればパッチ全体を拒否する。
-6. 採用した候補だけを反映し、対象の既存テスト、Prisma format / validate / generate、型検査、lint、回帰確認から関係するものだけを実行する。migration commandを実行してはならない。`polish`や`unwind`など別のworkflow skillを自動追加しない。必要なテストシナリオが増えた場合は変更を進めず停止する。
+5. command完了後に`bash [skills_root]/deepseek/delegate.sh show <task-id>`でresult metadata、report、candidate.patchを取得し、候補パッチを確認する。`status != 0`または`timed_out: true`ならcandidate.patchは診断専用として拒否する。許可パス外の変更、曖昧さの握り潰し、ハードコード、既存契約との不一致があればパッチ全体を拒否し、上位モデルが同じ変更を代替実装してはならない。
+6. 採用したDeepSeek候補を反映して初回実装とする。その後は上位モデルが、対象の既存テスト、Prisma format / validate / generate、型検査、lint、回帰確認から関係するものだけを実行し、失敗やレビュー指摘を本体コードへ直接修正する。migration commandを実行してはならない。`polish`や`unwind`など別のworkflow skillを自動追加しない。必要なテストシナリオが増えた場合は変更を進めず停止する。
 
 ユーザーが停止後に設定やmigration fileなどerrand禁止対象の変更を明示した場合は、`errand`を終了して通常実装へ移ることを一文で宣言する。明示された範囲だけを通常実装として扱い、errandを続行したことにして禁止対象を委任してはならない。
 

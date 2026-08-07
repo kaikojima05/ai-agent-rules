@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: 承認済み設計を、シナリオ一括承認を唯一の通常ゲートとしてTDD実装する。[agent_name]がテストとレビューを担当し、DeepSeekには本体コードだけを委任する。
+description: 承認済み設計を、シナリオ一括承認を唯一の通常ゲートとしてTDD実装する。DeepSeekが本体コードとPrisma schemaの初回実装、[agent_name]がテスト・レビュー・候補反映後の修正を担当する。
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion
 disable-model-invocation: true
 hooks:
@@ -13,7 +13,7 @@ hooks:
 
 ## 目的
 
-[agent_name]を設計・テスト・レビューの責任者、DeepSeekを制限された実装担当として、`scenario → red → delegated-green → review-green`を連続実行する。
+[agent_name]を設計・テスト・レビュー・修正の責任者、DeepSeekを制限された初回実装担当として、`scenario → red → delegated-green → review-green`を連続実行する。
 
 ## 権限境界
 
@@ -22,7 +22,8 @@ hooks:
 | テストシナリオ提案 | 可 | 相談として提案のみ可 |
 | テスト資産の変更 | 承認済みシナリオ内だけ可 | 禁止 |
 | 設計資産の変更 | cowlickの承認後だけ可 | 禁止 |
-| 許可された本体コード | 可 | 可 |
+| 許可された本体コードと`schema.prisma`の初回実装 | 禁止 | 可 |
+| DeepSeek候補反映後の本体コード修正 | 可 | 禁止 |
 | テスト実行・レビュー・Git | 可 | 禁止 |
 
 テスト資産には、test/spec、fixture、factory、mock、stub、fake、snapshot、golden file、テスト設定、CI上のテスト実行設定を含める。
@@ -57,15 +58,15 @@ hooks:
 - 最初からGreenなら、テストが要求を検出できるか検証する
 - テスト自体またはシナリオの変更が必要なら再承認へ戻る
 
-### 4. DeepSeekへ本体実装を委任する
+### 4. DeepSeekへ初回実装を委任する
 
-共通のDeepSeek委任実行器を使い、設計書と変更可能な本体コードの相対パスだけを渡す。テスト結果の要約は[agent_name]が指示へ含める。
+共通のDeepSeek委任実行器を使い、設計書と変更可能な本体コードまたは`schema.prisma`の相対パスだけを渡す。テスト結果の要約は[agent_name]が指示へ含める。
 
 ```bash
-bash [skills_root]/deepseek/delegate.sh implement <task-id> <設計書> <許可する本体コード>...
+bash [skills_root]/deepseek/delegate.sh implement <task-id> <設計書> <許可する本体コードまたはschema.prisma>...
 ```
 
-DeepSeekは隔離worktreeで候補パッチを作る。シェル、Git、外部通信、テスト・設計・設定の編集は許可しない。
+DeepSeekは隔離worktreeで初回実装の候補パッチを作る。シェル、Git、外部通信、テスト・設計・設定の編集は許可しない。[agent_name]は候補反映前にstub、雛形、部分実装を作らず、DeepSeekの失敗・timeout・候補拒否を自力の初回実装へ切り替える理由にしてはならない。
 
 ### 5. 相談を処理する
 
@@ -86,11 +87,11 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 - テスト環境検出、値のハードコード、assertion攻略がない
 - 承認済み設計とシナリオに一致する
 
-問題があればパッチ全体を拒否する。問題がなければ追跡対象を1ファイルずつ反映して即コミットする。無視されたファイルは作業ツリー上で検証し、強制stageはしない。
+問題があればパッチ全体を拒否し、新しいtask-idで再委任するか停止する。[agent_name]が同じ初回実装を代替してはならない。問題がなければ追跡対象を1ファイルずつ反映して即コミットする。無視されたファイルは作業ツリー上で検証し、強制stageはしない。
 
 ### 7. [agent_name]がGreen・レビュー・修正を完了する
 
-対象テスト、関連回帰テスト、必要な型検査とlintを実行する。[agent_name]が差分をレビューし、承認済み設計へ合わせる本体コード修正は自動で行う。テストまたは設計を変える必要が出た場合だけ承認フローへ戻る。
+対象テスト、関連回帰テスト、必要な型検査とlintを実行する。DeepSeek候補を反映した後は、[agent_name]が差分をレビューし、承認済み設計へ合わせる本体コード修正を直接行う。通常の修正をDeepSeekへ再委任しない。テストまたは設計を変える必要が出た場合だけ承認フローへ戻る。
 
 ## 例外停止
 

@@ -1,6 +1,6 @@
 ---
 name: conductor
-description: "@.[agent_name]/prompt/ の承認済み設計書を1枚選び、[agent_name]主導・DeepSeek実装担当のTDDフローを実行し、最終報告前にpolish品質ゲートを必ず完了させる"
+description: "旧run-agentとして、@.[agent_name]/prompt/ の承認済み設計書を1枚選び、DeepSeekが本体コードとPrisma schemaの初回実装、CodexまたはClaudeがテスト・レビュー・修正を担当するTDDフローを実行し、最終報告前にpolish品質ゲートを必ず完了させる"
 allowed-tools:
   - Read
   - Bash
@@ -10,7 +10,9 @@ disable-model-invocation: true
 
 ## 目的
 
-[agent_name]を唯一のオーケストレーターとして、未実装の設計書を1枚だけ完了する。DeepSeekには調査または許可済み本体コードの候補パッチ作成だけを委任する。
+[agent_name]を唯一のオーケストレーターとして、未実装の設計書を1枚だけ完了する。DeepSeekが許可済み本体コードと`schema.prisma`の初回実装候補を作り、[agent_name]はテスト、採否、反映後の修正、検証、Gitを担当する。
+
+旧`run-agent`の責務は現在の`conductor`が引き継いでいる。
 
 ## 前提
 
@@ -33,14 +35,14 @@ disable-model-invocation: true
 
 ### 2. 変更範囲を確定する
 
-設計書の対象ファイルを、テスト資産と本体コードへ分類する。DeepSeekへ渡せるのは本体コードだけである。次は[agent_name]管理のため委任しない。
+設計書の対象ファイルを、テスト資産、DeepSeekへ渡す本体コードと`schema.prisma`、その他の保護対象へ分類する。次は[agent_name]管理のため委任しない。
 
 - test/spec、fixture、factory、mock、stub、fake、snapshot
 - Markdown、AGENTS.md、スキル、エージェント設定
-- package、lockfile、CI、migration、schema、環境設定
+- package、lockfile、CI、migration、環境設定
 - Git管理ファイル
 
-対象本体コードに未コミット変更があれば、ユーザー変更との衝突として停止する。
+DeepSeekへ渡す許可パスに未コミット変更があれば、ユーザー変更との衝突として停止する。
 
 ### 3. tddをフル実行する
 
@@ -49,9 +51,11 @@ disable-model-invocation: true
 1. [agent_name]がテストシナリオを提案し、ユーザーの一括承認を得る
 2. [agent_name]がテストを書き、追跡対象ならファイル単位で即コミットする。無視されたテスト資産は強制stageせず、作業ツリー上で検証して継続する
 3. [agent_name]がRedを確認する
-4. 固定実行器でDeepSeekへ本体コードを委任する
+4. 固定実行器でDeepSeekへ本体コードと`schema.prisma`の初回実装を委任する
 5. [agent_name]が候補パッチを検証し、追跡対象を1ファイルずつ反映・即コミットする。無視されたファイルは作業ツリー上で検証する
-6. [agent_name]がGreen、レビュー、必要な本体コード修正を完了する
+6. 候補反映後に[agent_name]がGreen、レビュー、必要な本体コード修正を直接完了する
+
+[agent_name]はDeepSeek候補を反映する前に、本体コードや`schema.prisma`のstub、雛形、部分実装を作ってはならない。DeepSeekが候補を生成できない、timeoutした、または候補を拒否した場合も、[agent_name]による初回実装へ切り替えず、再委任または停止する。候補反映後の修正は[agent_name]の責務であり、DeepSeekへ再委任しない。
 
 調査・ドキュメントだけの設計書は[agent_name]が通常どおり実行し、DeepSeek実装を呼ばない。
 
@@ -93,7 +97,7 @@ Codexでは`.codex/rules/default.rules`、Claude Codeでは`settings.json`がこ
 
 - 実装した設計書と機能名
 - 承認されたテストシナリオ
-- DeepSeekの実装・ネスト検出のtask-id、相談、候補パッチの採否
+- DeepSeekの初回実装・ネスト検出のtask-id、相談、候補パッチの採否
 - Red、Green、回帰確認
 - polish の品質ゲート結果
 - 積んだコミット
@@ -107,8 +111,8 @@ Codexでは`.codex/rules/default.rules`、Claude Codeでは`settings.json`がこ
 # 読み取り専用調査
 bash [skills_root]/deepseek/delegate.sh research <task-id> <設計書>
 
-# 隔離worktreeで本体コードだけ実装
-bash [skills_root]/deepseek/delegate.sh implement <task-id> <設計書> <許可する本体コード>...
+# 隔離worktreeで本体コードとschema.prismaの初回実装候補を作成
+bash [skills_root]/deepseek/delegate.sh implement <task-id> <設計書> <許可する本体コードまたはschema.prisma>...
 
 # OpenCode・OpenRouter・対象モデルへの疎通だけ確認
 bash [skills_root]/deepseek/delegate.sh smoke
