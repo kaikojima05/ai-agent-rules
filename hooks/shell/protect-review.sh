@@ -1,8 +1,8 @@
 #!/bin/bash
 # PreToolUse(Bash|Edit|Write|NotebookEdit|apply_patch) hook: 配置場所に依存せず、
 # レビュー対象ファイルは読み取りを許可し、Codex ではユーザー承認済みの apply_patch だけ通す。
-REVIEW_FILE_PATH_RE='(^|/)(package\.json|schema\.prisma|Dockerfile[^/]*|docker-compose[^/]*|[^/]+\.tf)$|(^|/)(\.github/workflows|migrations)(/|$)'
-REVIEW_FILE_COMMAND_RE="package\\.json|schema\\.prisma|Dockerfile|docker-compose|\\.tf([[:space:]\\\"']|$)|\\.github/workflows|migrations/"
+REVIEW_FILE_PATH_RE='(^|/)(package\.json|Dockerfile[^/]*|docker-compose[^/]*|[^/]+\.tf)$|(^|/)(\.github/workflows|migrations)(/|$)'
+REVIEW_FILE_COMMAND_RE="package\\.json|Dockerfile|docker-compose|\\.tf([[:space:]\\\"']|$)|\\.github/workflows|migrations/"
 REVIEW_APPROVAL_USAGE="bash .codex/hooks/shell/protect-review.sh approve <対象パス>"
 
 review_repo_root() { git rev-parse --show-toplevel 2>/dev/null; }
@@ -58,7 +58,7 @@ exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 TOOL=$(hook_tool_name)
 
-REVIEW_FILE_MSG="package manifest・CI・migration・schema・container・Terraform 設定の変更にはユーザー承認が必要です。Codex では '$REVIEW_APPROVAL_USAGE' の実行承認後、apply_patch で変更してください。"
+REVIEW_FILE_MSG="package manifest・CI・migration・container・Terraform 設定の変更にはユーザー承認が必要です。Codex では '$REVIEW_APPROVAL_USAGE' の実行承認後、apply_patch で変更してください。"
 
 case "$TOOL" in
   Edit|Write|NotebookEdit|apply_patch)

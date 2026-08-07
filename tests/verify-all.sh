@@ -110,6 +110,7 @@ grep -q 'MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"' "$DS" && ok "Dee
 grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$DS" && grep -q '"reasoningEffort":$model_variant' "$DS" && grep -q -- '--variant "$MODEL_VARIANT"' "$DS" && ok "DeepSeek effort: highを明示" || ng "DeepSeek effortがhigh固定ではない"
 grep -q 'SURVEY_SCOPE_COUNT="4"' "$DS" && grep -q 'SURVEY_STEPS_PER_SCOPE="3"' "$DS" && grep -q 'SURVEY_MAX_STEPS="\$((SURVEY_SCOPE_COUNT \* SURVEY_STEPS_PER_SCOPE))"' "$DS" && grep -q '"steps":$survey_max_steps' "$DS" && grep -q -- '--agent delegate' "$DS" && ok "DeepSeek survey: 4段階ごとのagent step上限を固定" || ng "DeepSeek surveyのstep上限が不正"
 grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$DS" && grep -q 'SURVEY_HARD_TIMEOUT_MINUTES="4"' "$DS" && grep -q 'ERRAND_HARD_TIMEOUT_MINUTES="5"' "$DS" && grep -q 'RESEARCH_HARD_TIMEOUT_MINUTES="10"' "$DS" && grep -q 'DEFAULT_IDLE_TIMEOUT_MINUTES="2"' "$DS" && grep -q '^monitor_opencode()' "$DS" && grep -q '^terminate_process_group()' "$DS" && grep -q 'FINAL_STATUS=124' "$DS" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$DS" && ok "DeepSeek timeout: mode別hard上限と無出力上限を固定" || ng "DeepSeek timeout設定または記録処理が不正"
+grep -q '^write_task_state()' "$DS" && grep -q '^stop_running_children()' "$DS" && grep -q 'task is already active or has unfinished state' "$DS" && grep -q 'effective_status' "$DS" && grep -q 'source_snapshot:"HEAD"' "$DS" && ok "DeepSeek lifecycle: task状態・重複拒否・source snapshotを記録" || ng "DeepSeek lifecycle管理が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$DS" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$DS" && ok "DeepSeek config: readonly定数をjq引数で受け渡す" || ng "DeepSeek config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
@@ -174,8 +175,9 @@ echo "== 軽微な実装委任と全体調査委任 =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
 grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail は呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、パス、番号、固有名詞を完全な文字列のまま保持' "$ERRAND_SKILL" && grep -Fq '最も近い1件だけを選び' "$ERRAND_SKILL" && ok "errand は識別子を保持して最寄り同型へ限定" || ng "errand の軽量調査境界が不正"
-grep -Fq 'errand <task-id> <短い実装指示> -- <許可する本体コード>' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はDeepSeekの実装境界を固定" || ng "errand の実装境界が不正"
+grep -Fq 'errand <task-id> <短い実装指示> -- <許可する本体コードまたはschema.prisma>' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はDeepSeekの実装境界を固定" || ng "errand の実装境界が不正"
 grep -Fq '同型実装から配置・名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q 'new allowed path parent must exist' "$DS" && grep -q 'new allowed path must not be ignored' "$DS" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
+grep -Fq '未実装が前提である' "$ERRAND_SKILL" && grep -Fq '許可パスが複数あることだけを理由に停止してはならない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration commandを実行してはならない' "$ERRAND_SKILL" && grep -Fq '別のworkflow skillを自動追加しない' "$ERRAND_SKILL" && ok "errand は複数pathとPrisma schemaを許可しmigrationを禁止" || ng "errand の複数path・Prisma境界が不正"
 if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
   ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
 else
@@ -321,6 +323,7 @@ fi
 printf '#!/bin/bash\njq -e '\''(.default_agent == "delegate") and (.agent.delegate.steps == 12)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 SURVEY_EXACT_IDENTIFIER='t47_20__kanzen_douki__device_nebiki_kanri_db'
+SURVEY_SOURCE_HEAD=$(git rev-parse HEAD)
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey empty-survey "$SURVEY_EXACT_IDENTIFIER と同型の実装を調査する" > delegate-survey.out 2>&1; then
   ok "delegate-deepseek: surveyは設計書なしの読み取り調査を完了"
 else
@@ -328,7 +331,7 @@ else
 fi
 SURVEY_ROOT="$DELEGATE_REPO/.claude/tmp/deepseek/empty-survey"
 SURVEY_RESULT="$SURVEY_ROOT/result.json"
-if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "12" ] && [ ! -e "$SURVEY_ROOT/spec.md" ]; then
+if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "12" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/.empty-survey.task" ]; then
   ok "delegate-deepseek: surveyは調査指示をspecへ永続化しない"
 else
   ng "delegate-deepseek: surveyの一時指示またはresult.jsonが不正"
@@ -401,10 +404,65 @@ if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" er
 else
   ok "delegate-deepseek: 存在しない親directoryへの追加を拒否"
 fi
+mkdir -p prisma
+printf 'generator client {}\n' > prisma/schema.prisma
+git add prisma/schema.prisma
+git commit -qm "test: Prisma schema対象"
+printf '#!/bin/bash\nprintf '\''model AddedSubject {}\\n'\'' >> prisma/schema.prisma\nprintf '\''{"type":"text","text":"schema added"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand errand-prisma-schema '既存規約に従いPrisma modelを追加する' -- prisma/schema.prisma > delegate-errand-prisma.out 2>&1; then
+  ok "delegate-deepseek: errandはschema.prismaの候補patchを作成"
+else
+  ng "delegate-deepseek: errandがschema.prismaを拒否"; cat delegate-errand-prisma.out
+fi
+PRISMA_RESULT_ROOT="$DELEGATE_REPO/.claude/tmp/deepseek/errand-prisma-schema"
+if grep -Fq 'model AddedSubject' "$PRISMA_RESULT_ROOT/candidate.patch" && [ "$(jq -c '.changed_paths' "$PRISMA_RESULT_ROOT/result.json" 2>/dev/null)" = '["prisma/schema.prisma"]' ]; then
+  ok "delegate-deepseek: Prisma変更を指定schemaだけに限定"
+else
+  ng "delegate-deepseek: Prisma候補patchの変更範囲が不正"
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand errand-migration-file 'migration fileを追加する' -- prisma/migrations/001.sql > delegate-errand-migration.out 2>&1; then
+  ng "delegate-deepseek: migration fileを許可"
+else
+  ok "delegate-deepseek: migration fileを引き続き拒否"
+fi
+INTERRUPT_PID_FILE="$DELEGATE_REPO/interrupted-opencode.pid"
+printf '#!/bin/bash\n/bin/sleep 0.01\n' > "$DELEGATE_BIN/sleep"
+printf '#!/bin/bash\nprintf '\''%%s\\n'\'' "$$" > "%s"\nexec /bin/sleep 30\n' "$INTERRUPT_PID_FILE" > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/sleep" "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey interrupted-survey "$SURVEY_EXACT_IDENTIFIER の中断動作を調査する" > delegate-interrupted.out 2>&1 &
+INTERRUPTED_RUNNER_PID=$!
+INTERRUPT_WAIT_COUNT=0
+while [ ! -f "$INTERRUPT_PID_FILE" ] && kill -0 "$INTERRUPTED_RUNNER_PID" 2>/dev/null && [ "$INTERRUPT_WAIT_COUNT" -lt 100 ]; do
+  /bin/sleep 0.02
+  INTERRUPT_WAIT_COUNT=$((INTERRUPT_WAIT_COUNT + 1))
+done
+INTERRUPTED_STATE="$DELEGATE_REPO/.claude/tmp/deepseek/.interrupted-survey.task/state.json"
+PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show interrupted-survey > delegate-show-running.out 2>&1
+RUNNING_SHOW_STATUS=$?
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey interrupted-survey "$SURVEY_EXACT_IDENTIFIER の重複起動を試す" > delegate-duplicate.out 2>&1
+DUPLICATE_STATUS=$?
+if [ "$RUNNING_SHOW_STATUS" -eq 2 ] && grep -Fq '"effective_status": "running"' delegate-show-running.out && [ "$DUPLICATE_STATUS" -ne 0 ] && grep -Fq 'task is already active or has unfinished state' delegate-duplicate.out; then
+  ok "delegate-deepseek: showで実行中を表示し同じtask-idの重複起動を拒否"
+else
+  ng "delegate-deepseek: 実行中表示または重複拒否が不正"; cat delegate-show-running.out; cat delegate-duplicate.out
+fi
+kill -TERM "$INTERRUPTED_RUNNER_PID" 2>/dev/null
+wait "$INTERRUPTED_RUNNER_PID"
+INTERRUPTED_STATUS=$?
+INTERRUPTED_OPENCODE_PID=$(sed -n '1p' "$INTERRUPT_PID_FILE")
+PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show interrupted-survey > delegate-show-interrupted.out 2>&1
+INTERRUPTED_SHOW_STATUS=$?
+if [ "$INTERRUPTED_STATUS" -eq 143 ] && [ "$INTERRUPTED_SHOW_STATUS" -eq 1 ] && [ "$(jq -r '.lifecycle_status' "$INTERRUPTED_STATE" 2>/dev/null)" = "interrupted" ] && grep -Fq '"effective_status": "interrupted"' delegate-show-interrupted.out && ! kill -0 "$INTERRUPTED_OPENCODE_PID" 2>/dev/null && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/interrupted-survey" ]; then
+  ok "delegate-deepseek: 親中断時にOpenCodeを終了してinterrupted状態を残す"
+else
+  ng "delegate-deepseek: 中断cleanupまたは状態記録が不正"; cat delegate-interrupted.out; cat delegate-show-interrupted.out
+fi
+rm -f "$DELEGATE_BIN/sleep" "$INTERRUPT_PID_FILE"
 TIMEOUT_CLOCK="$DELEGATE_REPO/timeout-clock"
 TIMEOUT_PID_FILE="$DELEGATE_REPO/timeout-opencode.pid"
-printf '#!/bin/bash\nCLOCK_FILE="%s"\nvalue=$(sed -n '\''1p'\'' "$CLOCK_FILE")\nvalue=$((value + 121))\nprintf '\''%%s\\n'\'' "$value" > "$CLOCK_FILE"\nprintf '\''%%s\\n'\'' "$value"\n' "$TIMEOUT_CLOCK" > "$DELEGATE_BIN/date"
-printf '#!/bin/bash\nif [ "${1:-}" = "5" ]; then /bin/sleep 0.05; fi\nexit 0\n' > "$DELEGATE_BIN/sleep"
+printf '#!/bin/bash\nCLOCK_FILE="%s"\nvalue=$(sed -n '\''1p'\'' "$CLOCK_FILE")\nvalue=$((value + 61))\nprintf '\''%%s\\n'\'' "$value" > "$CLOCK_FILE"\nprintf '\''%%s\\n'\'' "$value"\n' "$TIMEOUT_CLOCK" > "$DELEGATE_BIN/date"
+printf '#!/bin/bash\nif [ "${1:-}" = "5" ]; then /bin/sleep 0.2; fi\nexit 0\n' > "$DELEGATE_BIN/sleep"
 printf '0\n' > "$TIMEOUT_CLOCK"
 printf '#!/bin/bash\nprintf '\''%%s\\n'\'' "$$" > "%s"\nexec /bin/sleep 30\n' "$TIMEOUT_PID_FILE" > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/date" "$DELEGATE_BIN/sleep" "$DELEGATE_BIN/opencode"
@@ -427,7 +485,7 @@ HARD_TIMEOUT_PID=$(sed -n '1p' "$TIMEOUT_PID_FILE")
 if [ "$HARD_TIMEOUT_STATUS" -eq 124 ] && [ "$(jq -r '.timeout_kind' "$HARD_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "hard" ] && grep -Fxq 'DeepSeek did not return a final textual report.' "$HARD_TIMEOUT_ROOT/report.md" && ! grep -Fq 'partial' "$HARD_TIMEOUT_ROOT/report.md" && ! kill -0 "$HARD_TIMEOUT_PID" 2>/dev/null; then
   ok "delegate-deepseek: 総時間timeoutで部分出力を最終reportへ昇格しない"
 else
-  ng "delegate-deepseek: 総時間timeoutまたは部分出力の扱いが不正"; cat delegate-timeout-hard.out
+  ng "delegate-deepseek: 総時間timeoutまたは部分出力の扱いが不正"; cat delegate-timeout-hard.out; cat "$HARD_TIMEOUT_ROOT/result.json"
 fi
 rm -f "$DELEGATE_BIN/date" "$DELEGATE_BIN/sleep" "$TIMEOUT_CLOCK" "$TIMEOUT_PID_FILE"
 printf '#!/bin/bash\ntouch protected-change.txt\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
@@ -587,6 +645,7 @@ for SCRIPT in protect-config.sh protect-locks.sh protect-review.sh; do
   [ "$BINDING_COUNT" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] || append_group_failure "$SCRIPT: $BINDING_COUNT bindings"
 done
 report_group "保護hookを apply_patch/Bash の両方へ配線" "$GROUP_FAILURES"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("deny-migration.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "migration禁止hookをBashへ配線" || ng "migration禁止hookの配線漏れ"
 if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
   ok "未対応 ask hook を codex へ未配線"
 else
@@ -660,7 +719,7 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: rebase事前確認をallow" || ng "rules: rebase事前確認判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/rebase/rebase.sh node_modules/.cache/rebase-plan.json 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: rebase plan実行をallow" || ng "rules: rebase plan実行判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .codex/hooks/shell/protect-review.sh approve front/prisma/schema.prisma 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .codex/hooks/shell/protect-review.sh approve apps/api/infra/main.tf 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: review対象の変更承認を prompt" || ng "rules: review対象の承認判定失敗 out=[$OUT]"
 else
   echo "skip codex CLI が無いため config / rules 実機検査を省略"
@@ -717,6 +776,8 @@ fi
 if bash $H/protect-review.sh approve ../outside/main.tf >/dev/null 2>&1; then ng "protect-review: repository外pathを承認"; else ok "protect-review: repository外pathを拒否"; fi
 PRF_READ=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"cat apps/api/infra/main.tf"}}')
 [ -z "$(echo "$PRF_READ" | bash $H/protect-review.sh)" ] && ok "protect-review: 読み取りは許可" || ng "protect-review: 読み取りを誤拒否"
+PRISMA_EDIT=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: front/prisma/schema.prisma\n+x\n*** End Patch"}}')
+[ -z "$(echo "$PRISMA_EDIT" | bash $H/protect-review.sh)" ] && ok "protect-review: schema.prisma編集は承認不要" || ng "protect-review: schema.prismaを誤拒否"
 PAC=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .codex/config.toml\n+x\n*** End Patch"}}')
 [ "$(echo "$PAC" | bash $H/protect-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-config: .codex patch を deny" || ng "protect-config: .codex patch 素通し"
 PAC2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .agents/skills/e2e/SKILL.md\n+x\n*** End Patch"}}')
@@ -757,6 +818,7 @@ for WRITER_COMMAND in "${FILESYSTEM_WRITER_COMMANDS[@]}"; do
 done
 report_group "Claude: filesystem writerをask" "$GROUP_FAILURES"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("deny-migration.sh"))] | length' "$SJ")" = "1" ] && jq -e '.permissions.ask | index("Edit(**/schema.prisma)") | not' "$SL" >/dev/null && ok "Claude: schema.prismaは自動編集・migrationはhook拒否" || ng "Claude: Prisma境界が不正"
 GROUP_FAILURES=
 for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
   PERMISSION="mcp__serena__${MCP_TOOL}"

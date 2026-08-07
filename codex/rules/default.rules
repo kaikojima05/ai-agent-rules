@@ -62,10 +62,10 @@ prefix_rule(
     decision = "prompt",
     justification = "レビュー対象ファイルへの次の1回の変更を許可するか確認します。",
     match = [
-        "bash .codex/hooks/shell/protect-review.sh approve front/prisma/schema.prisma",
+        "bash .codex/hooks/shell/protect-review.sh approve apps/api/infra/main.tf",
     ],
     not_match = [
-        "bash .codex/hooks/shell/protect-review.sh front/prisma/schema.prisma",
+        "bash .codex/hooks/shell/protect-review.sh apps/api/infra/main.tf",
     ],
 )
 

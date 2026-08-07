@@ -84,6 +84,11 @@
           },
           {
             "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-migration.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-history.sh\"",
             "timeout": 5
           },

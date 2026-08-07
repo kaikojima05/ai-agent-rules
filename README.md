@@ -110,6 +110,10 @@ surveyは実行ステップ数を固定上限で打ち切り、上限到達時�
 
 全modeのOpenCode実行には、JSONLへ新しいeventが出ない無通信timeoutと総実行時間timeoutを併用する。`smoke`は30秒無通信・1分総時間、`survey`と`nesting`は2分無通信・4分総時間、`errand`は2分無通信・5分総時間、`research`と`implement`は2分無通信・10分総時間を上限とする。timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。自動retryや途中tool出力からの結論生成は行わず、`result.json`へtimeout種別・経過時間・終了statusを記録し、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。
 
+task-idごとに原子的な実行lockと状態metadataを作り、同じtask-idの重複起動を拒否する。親実行器が中断された場合はmonitorとOpenCode process groupを終了し、`show`へ`interrupted`を残す。`show`は未開始、`running`、`orphaned-running`、`interrupted`、失敗、完了を区別するため、実行中の結果有無を`find`や`ps`で推測しない。調査metadataには隔離worktreeが参照した`source_head`と、そこへ反映されないメイン作業ツリーの`source_worktree_status`を記録する。
+
+`errand`は対象ファイルが未実装または複数であることだけでは停止しない。同じ既存パターンから変更を一意に決められる本体コードと`schema.prisma`を許可できる。ただし設定、migration file、依存関係は対象外であり、`prisma migrate`・`prisma db push`・`prisma db execute`は全workflowでhookが拒否する。
+
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
 ```bash
@@ -142,7 +146,8 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | 委任processの完了状態を確認する（`ps -p <PID> ...`） | ✅ 自動 |
 | 検証済み読み取りcommandの出力を`/dev/null`へ捨てる | ✅ 自動 |
 | 通常ファイルを書き換える（コード・テスト・ドキュメント） | ✅ 自動 |
-| `package.json` / CI / migration / Prisma / Docker / Terraform を書き換える | 🙋 確認 |
+| `package.json` / CI / migration file / Docker / Terraform を書き換える | 🙋 確認 |
+| `schema.prisma`を書き換え、`prisma format` / `validate` / `generate`を実行する | ✅ 自動 |
 | shellで作成・上書き・metadata変更する（`cp` `mkdir` `chmod` `sed -i` 等） | 🙋 確認 |
 | ファイルを消す（`rm`等） | 🙋 確認 |
 | localhost を含むサーバーへ HTTP request を送る | 🙋 sandbox 外で確認 |
@@ -150,6 +155,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | `tdd` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
 | pipeline・loop・条件分岐・subshell・inline shellへ複数commandを集約する | 🚫 禁止 |
 | `find -delete/-exec`、`sort -o`、`rg --pre`など読み取りcommandの危険option | 🚫 禁止 |
+| `prisma migrate` / `prisma db push` / `prisma db execute`を実行する | 🚫 禁止 |
 | `.env` / lockfile / `.git/` / エージェント設定を直接書き換える | 🚫 禁止 |
 | 契約に反するコミット（複数stage・対象名不一致・日本語なし・AI署名・`--amend`） | 🚫 禁止 |
 | `git push` / `git cherry-pick`、依存の install / add | 🚫 禁止 |
@@ -176,6 +182,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 - `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-config.sh`
 - 機密ファイル（`.env` / `.env.*`）の書き込み・削除の封じ込め → `hooks/shell/protect-env.sh`（sandbox / permission profile との二重層）
 - lockfile の編集ツール・Bash直接変更を拒否 → `hooks/shell/protect-locks.sh`（permission設定との二重層）
+- Prisma migrationとDB直接反映commandを拒否 → `hooks/shell/deny-migration.sh`
 - レビュー対象ファイルの未承認変更を拒否し、Codexではpath単位の1回限り承認を消費 → `hooks/shell/protect-review.sh`
 - コミット契約（stage厳密1件・対象ファイル名一致・日本語・AI署名禁止）の執行 → `hooks/shell/commit-gate.sh`
 

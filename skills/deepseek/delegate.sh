@@ -31,6 +31,14 @@ TASK_ID="${2:-}"
 SPEC_PATH="${3:-}"
 DIRECT_INSTRUCTION="${3:-}"
 NESTING_PATHS=()
+OPENCODE_PID=""
+TIMEOUT_MONITOR_PID=""
+TASK_RUNTIME=""
+TASK_STATE=""
+TASK_FINISHED=0
+TASK_STARTED_AT=""
+SOURCE_HEAD=""
+SOURCE_WORKTREE_STATUS_JSON='[]'
 
 fail() {
   printf 'deepseek: %s\n' "$1" >&2
@@ -94,7 +102,7 @@ monitor_opencode() {
   local current_time
   local timeout_kind
 
-  while kill -0 "$process_id" 2>/dev/null; do
+  while process_group_alive "$process_id"; do
     sleep "$TIMEOUT_POLL_SECONDS"
     current_time=$(date +%s)
     current_size=$(wc -c < "$output_path" 2>/dev/null || printf '0')
@@ -111,12 +119,53 @@ monitor_opencode() {
       timeout_kind="idle"
     fi
 
-    if [ -n "$timeout_kind" ] && kill -0 "$process_id" 2>/dev/null; then
+    if [ -n "$timeout_kind" ] && process_group_alive "$process_id"; then
       printf '%s\n' "$timeout_kind" > "$TIMEOUT_MARKER"
       terminate_process_group "$process_id"
       return
     fi
   done
+}
+
+write_task_state() {
+  local lifecycle_status="$1"
+  local exit_status="${2:-}"
+  local updated_at
+  local state_temp
+
+  [ -n "$TASK_STATE" ] || return
+  [ -d "$TASK_RUNTIME" ] || return
+  updated_at=$(date +%s)
+  state_temp="$TASK_STATE.tmp"
+  jq -n \
+    --arg mode "$MODE" \
+    --arg task_id "$TASK_ID" \
+    --arg lifecycle_status "$lifecycle_status" \
+    --arg exit_status "$exit_status" \
+    --argjson runner_pid "$$" \
+    --arg opencode_pid "$OPENCODE_PID" \
+    --argjson started_at "$TASK_STARTED_AT" \
+    --argjson updated_at "$updated_at" \
+    --arg source_head "$SOURCE_HEAD" \
+    --argjson source_worktree_status "$SOURCE_WORKTREE_STATUS_JSON" \
+    '{mode:$mode,task_id:$task_id,lifecycle_status:$lifecycle_status,exit_status:(if $exit_status == "" then null else ($exit_status | tonumber) end),runner_pid:$runner_pid,opencode_pid:(if $opencode_pid == "" then null else ($opencode_pid | tonumber) end),started_at:$started_at,updated_at:$updated_at,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status}' \
+    > "$state_temp" || return 1
+  mv "$state_temp" "$TASK_STATE"
+}
+
+stop_running_children() {
+  if [ -n "$TIMEOUT_MONITOR_PID" ]; then
+    kill "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
+    wait "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
+    TIMEOUT_MONITOR_PID=""
+  fi
+  if [ -n "$OPENCODE_PID" ] && process_group_alive "$OPENCODE_PID"; then
+    terminate_process_group "$OPENCODE_PID"
+  fi
+  if [ -n "$OPENCODE_PID" ]; then
+    wait "$OPENCODE_PID" 2>/dev/null || true
+    OPENCODE_PID=""
+  fi
 }
 
 validate_repo_path() {
@@ -176,7 +225,28 @@ cd "$REPO_ROOT" || fail "cannot enter repository root"
 
 if [ "$MODE" = "show" ]; then
   RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"
-  [ -f "$RESULT_ROOT/result.json" ] || fail "result metadata not found: $RESULT_ROOT/result.json"
+  TASK_RUNTIME="${RESULT_ROOT%/*}/.${TASK_ID}.task"
+  TASK_STATE="$TASK_RUNTIME/state.json"
+  if [ ! -f "$RESULT_ROOT/result.json" ] && [ -f "$TASK_STATE" ]; then
+    LIFECYCLE_STATUS=$(jq -r '.lifecycle_status' "$TASK_STATE") || fail "cannot read task state"
+    RUNNER_PID=$(jq -r '.runner_pid' "$TASK_STATE") || fail "cannot read task runner pid"
+    OPENCODE_STATE_PID=$(jq -r '.opencode_pid // empty' "$TASK_STATE") || fail "cannot read OpenCode pid"
+    EFFECTIVE_STATUS="$LIFECYCLE_STATUS"
+    if [ "$LIFECYCLE_STATUS" = "preparing" ] || [ "$LIFECYCLE_STATUS" = "running" ]; then
+      if kill -0 "$RUNNER_PID" 2>/dev/null; then
+        EFFECTIVE_STATUS="running"
+      elif [ -n "$OPENCODE_STATE_PID" ] && process_group_alive "$OPENCODE_STATE_PID"; then
+        EFFECTIVE_STATUS="orphaned-running"
+      else
+        EFFECTIVE_STATUS="interrupted"
+      fi
+    fi
+    printf '%s\n' 'state:'
+    jq --arg effective_status "$EFFECTIVE_STATUS" '. + {effective_status:$effective_status}' "$TASK_STATE" || fail "cannot display task state"
+    [ "$EFFECTIVE_STATUS" = "running" ] || [ "$EFFECTIVE_STATUS" = "orphaned-running" ] || exit 1
+    exit 2
+  fi
+  [ -f "$RESULT_ROOT/result.json" ] || fail "task result and state not found for: $TASK_ID"
   [ -f "$RESULT_ROOT/candidate.patch" ] || fail "candidate patch not found: $RESULT_ROOT/candidate.patch"
   printf '%s\n' 'metadata:'
   jq . "$RESULT_ROOT/result.json" || fail "cannot read result metadata"
@@ -224,6 +294,16 @@ RESULT_STAGING=""
 TIMEOUT_MARKER="$TEMP_ROOT/timeout.kind"
 
 cleanup() {
+  local exit_status=$?
+  local lifecycle_status="failed"
+  set +e
+  stop_running_children
+  if [ "$TASK_FINISHED" -eq 0 ] && [ -n "$TASK_STATE" ] && [ -f "$TASK_STATE" ]; then
+    case "$exit_status" in
+      130|143) lifecycle_status="interrupted" ;;
+    esac
+    write_task_state "$lifecycle_status" "$exit_status" || true
+  fi
   if [ "$WORKTREE_ADDED" -eq 1 ]; then
     git worktree remove --force "$WORKTREE" >/dev/null 2>&1 || true
   fi
@@ -241,6 +321,13 @@ if [ "$MODE" != "smoke" ]; then
   [ ! -e "$RESULT_ROOT" ] || fail "result already exists: $RESULT_ROOT"
   RESULT_PARENT=${RESULT_ROOT%/*}
   mkdir -p "$RESULT_PARENT" || fail "cannot create result parent directory"
+  SOURCE_HEAD=$(git rev-parse HEAD) || fail "cannot read source HEAD"
+  SOURCE_WORKTREE_STATUS_JSON=$(git status --porcelain=v1 --untracked-files=all | jq -Rsc 'split("\n") | map(select(length > 0))') || fail "cannot record source worktree status"
+  TASK_RUNTIME="$RESULT_PARENT/.${TASK_ID}.task"
+  mkdir "$TASK_RUNTIME" 2>/dev/null || fail "task is already active or has unfinished state: $TASK_ID; use show before choosing a new task id"
+  TASK_STATE="$TASK_RUNTIME/state.json"
+  TASK_STARTED_AT=$(date +%s)
+  write_task_state "preparing" || fail "cannot create task state"
   RESULT_STAGING=$(mktemp -d "$RESULT_PARENT/.${TASK_ID}.incomplete.XXXXXX") || fail "cannot create staging result directory"
 fi
 
@@ -275,7 +362,7 @@ if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
     validate_repo_path "$path"
     case "$path" in
       *.test.*|*.spec.*|*/test/*|*/tests/*|*/__tests__/*|*.snap|*fixture*|*mock*|*stub*|*fake*) fail "test assets cannot be delegated: $path" ;;
-      AGENTS.md|*/AGENTS.md|*.md|package.json|*/package.json|*lock*.json|*.lock|*.toml|*.yaml|*.yml|*.env|*.env.*|*/migrations/*|*.prisma) fail "protected path cannot be delegated: $path" ;;
+      AGENTS.md|*/AGENTS.md|*.md|package.json|*/package.json|*lock*.json|*.lock|*.toml|*.yaml|*.yml|*.env|*.env.*|*/migrations/*) fail "protected path cannot be delegated: $path" ;;
     esac
     if [ -e "$REPO_ROOT/$path" ]; then
       git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 || fail "existing allowed path must be tracked: $path"
@@ -412,12 +499,18 @@ env -i \
   opencode --pure run --agent delegate --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR" &
 OPENCODE_PID=$!
 set +m
+write_task_state "running" || fail "cannot update task state"
 monitor_opencode "$OPENCODE_PID" "$OPENCODE_OUTPUT" "$OPENCODE_STARTED_AT" &
 TIMEOUT_MONITOR_PID=$!
 wait "$OPENCODE_PID"
 OPENCODE_STATUS=$?
 kill "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
 wait "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
+TIMEOUT_MONITOR_PID=""
+if process_group_alive "$OPENCODE_PID"; then
+  terminate_process_group "$OPENCODE_PID"
+fi
+OPENCODE_PID=""
 OPENCODE_FINISHED_AT=$(date +%s)
 OPENCODE_ELAPSED_SECONDS="$((OPENCODE_FINISHED_AT - OPENCODE_STARTED_AT))"
 TIMED_OUT=false
@@ -490,14 +583,20 @@ jq -n \
   --argjson idle_timeout_seconds "$IDLE_TIMEOUT_SECONDS" \
   --argjson hard_timeout_seconds "$HARD_TIMEOUT_SECONDS" \
   --argjson termination_grace_seconds "$TIMEOUT_TERM_GRACE_SECONDS" \
+  --arg source_head "$SOURCE_HEAD" \
+  --argjson source_worktree_status "$SOURCE_WORKTREE_STATUS_JSON" \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$CHANGED_PATHS_JSON" \
-  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,termination_grace_seconds:$termination_grace_seconds,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,termination_grace_seconds:$termination_grace_seconds,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"
 RESULT_STAGING=""
+rm -rf "$TASK_RUNTIME" || fail "cannot remove completed task state"
+TASK_RUNTIME=""
+TASK_STATE=""
+TASK_FINISHED=1
 
 printf 'result: %s\n' "$RESULT_ROOT"
 printf '%s\n' 'report:'

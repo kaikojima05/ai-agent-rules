@@ -86,7 +86,6 @@
       "Edit(**/package.json)",
       "Edit(.github/workflows/**)",
       "Edit(**/migrations/**)",
-      "Edit(**/schema.prisma)",
       "Edit(**/Dockerfile*)",
       "Edit(**/docker-compose*)",
       "Edit(**/*.tf)"

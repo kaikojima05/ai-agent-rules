@@ -160,6 +160,19 @@ check "registry: npx は deny"           deny  deny-registry.sh '{"tool_name":"B
 check "registry: npm install は deny"   deny  deny-registry.sh '{"tool_name":"Bash","tool_input":{"command":"npm install left-pad"}}'
 check "registry: yarn build は棄権"     empty deny-registry.sh '{"tool_name":"Bash","tool_input":{"command":"yarn build"}}'
 
+# --- deny-migration ---
+check_bash_group "migration: PrismaのDB反映commandを拒否" deny deny-migration.sh \
+  "node_modules/.bin/prisma migrate dev" \
+  "yarn prisma migrate deploy" \
+  "npx prisma migrate reset" \
+  "prisma db push" \
+  "prisma db execute --file migration.sql" \
+  "yarn db:migrate"
+check_bash_group "migration: schemaの安全な検証commandは許可" empty deny-migration.sh \
+  "yarn prisma format --schema prisma/schema.prisma" \
+  "node_modules/.bin/prisma validate" \
+  "yarn prisma generate"
+
 # --- commit-gate ---
 check "commit-gate: git add -A は deny"       deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git add -A"}}'
 check_bash_group "commit-gate: 強制stage は deny" deny commit-gate.sh \
